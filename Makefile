@@ -37,7 +37,7 @@ test:
 # ---------------------------------------------------------------------------
 .PHONY: demo
 demo:
-	@echo "demo target not yet implemented — available from Phase 1 onward."
+	$(VENV)/Scripts/python -m src.demo
 
 # ---------------------------------------------------------------------------
 # deploy — build + push + deploy to DigitalOcean (Phase 7+)

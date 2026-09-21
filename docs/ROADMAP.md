@@ -13,16 +13,16 @@ met. Update the checkboxes as you go so future sessions know where things stand.
 - **Definition of done:** `make setup && make dev` runs a server that responds
   to `/health`.
 
-## Phase 1 — Hardcoded pipeline (no agent yet)
+## Phase 1 — Hardcoded pipeline (no agent yet) ✅
 - Build the *shape* of the system with a fixed, hardcoded plan before adding
   any agentic decision-making — this de-risks the plumbing early.
-- [ ] Seed a small fake dataset (mock JSON files standing in for GitHub
+- [x] Seed a small fake dataset (mock JSON files standing in for GitHub
       issues/PRs/comments for "Project X" — goals, tasks, a changelog,
       some blockers) so Phase 1 doesn't depend on GitHub being wired up yet
-- [ ] Hardcode a 3-step plan for one canned question
-- [ ] Hardcoded tool functions that read from the seed data (no MCP yet)
-- [ ] Synthesis LLM call that takes the evidence and produces a cited answer
-- [ ] Trace object captured and printed/logged (not yet in LangSmith)
+- [x] Hardcode a 3-step plan for one canned question
+- [x] Hardcoded tool functions that read from the seed data (no MCP yet)
+- [x] Synthesis LLM call that takes the evidence and produces a cited answer
+- [x] Trace object captured and printed/logged (not yet in LangSmith)
 - **Definition of done:** `make demo` runs the one canned question end-to-end
   against fake data and prints plan → evidence → cited answer.
 

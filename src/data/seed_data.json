@@ -1,0 +1,163 @@
+{
+  "repo": "kalyanAVT/demo-project-x",
+  "milestone": {
+    "title": "Q3 2026 Release",
+    "due_date": "2026-09-30",
+    "state": "open",
+    "description": "Ship core features for Project X v1.0 by end of Q3."
+  },
+  "issues": [
+    {
+      "number": 1,
+      "title": "Define Project X goals and success metrics",
+      "state": "closed",
+      "labels": ["feature", "planning"],
+      "created_at": "2026-07-01T09:00:00Z",
+      "closed_at": "2026-07-05T14:00:00Z",
+      "body": "We need to define clear goals for Project X: ship the data pipeline, launch the dashboard, and onboard 3 pilot customers by end of Q3.",
+      "comments": [
+        {
+          "author": "pm-alice",
+          "created_at": "2026-07-02T10:30:00Z",
+          "body": "Agreed. Top priority is the data pipeline — everything else depends on it."
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "title": "Build data ingestion pipeline",
+      "state": "closed",
+      "labels": ["feature", "backend"],
+      "created_at": "2026-07-06T08:00:00Z",
+      "closed_at": "2026-08-15T16:00:00Z",
+      "body": "Implement the core data ingestion pipeline that reads from source APIs and writes to the data warehouse.",
+      "comments": [
+        {
+          "author": "dev-bob",
+          "created_at": "2026-07-20T11:00:00Z",
+          "body": "Hit a rate-limit issue with the source API. Implementing exponential backoff."
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "title": "Dashboard not loading for large datasets",
+      "state": "open",
+      "labels": ["bug", "blocker"],
+      "created_at": "2026-08-20T09:00:00Z",
+      "closed_at": null,
+      "body": "When datasets exceed 10k rows the dashboard times out. This is blocking the pilot customer onboarding.",
+      "comments": [
+        {
+          "author": "dev-carol",
+          "created_at": "2026-08-21T10:00:00Z",
+          "body": "Root cause: the frontend is fetching all rows at once. Need server-side pagination."
+        },
+        {
+          "author": "pm-alice",
+          "created_at": "2026-08-22T08:30:00Z",
+          "body": "This is a blocker for the pilot. Prioritize this over new features."
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Pilot customer onboarding delayed",
+      "state": "open",
+      "labels": ["blocker", "customer"],
+      "created_at": "2026-09-01T08:00:00Z",
+      "closed_at": null,
+      "body": "Cannot onboard pilot customers until the dashboard performance issue (#3) is resolved. Deadline at risk.",
+      "comments": [
+        {
+          "author": "pm-alice",
+          "created_at": "2026-09-02T09:00:00Z",
+          "body": "Moved the pilot onboarding target from Sept 15 to Sept 25. If #3 isn't fixed by Sept 20, we miss Q3."
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "title": "Add user authentication to dashboard",
+      "state": "closed",
+      "labels": ["feature", "frontend"],
+      "created_at": "2026-07-15T10:00:00Z",
+      "closed_at": "2026-08-10T12:00:00Z",
+      "body": "Implement OAuth2 login for the dashboard so we can scope data access per customer.",
+      "comments": []
+    }
+  ],
+  "pull_requests": [
+    {
+      "number": 101,
+      "title": "feat: implement data ingestion pipeline",
+      "state": "merged",
+      "created_at": "2026-08-01T10:00:00Z",
+      "merged_at": "2026-08-15T16:00:00Z",
+      "closes_issues": [2],
+      "body": "Implements the core data pipeline with backoff and retry logic.",
+      "review_comments": [
+        {
+          "author": "dev-carol",
+          "body": "Looks solid. One concern: we're not handling schema drift. If the source API changes its response format, the pipeline will silently drop fields."
+        }
+      ]
+    },
+    {
+      "number": 102,
+      "title": "feat: add OAuth2 authentication",
+      "state": "merged",
+      "created_at": "2026-08-05T09:00:00Z",
+      "merged_at": "2026-08-10T12:00:00Z",
+      "closes_issues": [5],
+      "body": "Adds OAuth2 login flow using Auth0. Scoped data access per customer org.",
+      "review_comments": [
+        {
+          "author": "dev-bob",
+          "body": "Works well. We should add refresh token rotation before going to prod — current implementation stores tokens in localStorage."
+        }
+      ]
+    },
+    {
+      "number": 103,
+      "title": "fix: add server-side pagination to dashboard API",
+      "state": "open",
+      "created_at": "2026-09-10T14:00:00Z",
+      "merged_at": null,
+      "closes_issues": [3],
+      "body": "Adds cursor-based pagination to the /data endpoint. Should resolve the timeout issue for large datasets.",
+      "review_comments": [
+        {
+          "author": "pm-alice",
+          "body": "This is our highest-priority fix. Please get it merged before Sept 20."
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "sha": "a1b2c3d",
+      "message": "feat: scaffold data pipeline module",
+      "author": "dev-bob",
+      "date": "2026-07-10T08:00:00Z"
+    },
+    {
+      "sha": "e4f5g6h",
+      "message": "feat: implement ingestion with backoff/retry",
+      "author": "dev-bob",
+      "date": "2026-08-12T15:00:00Z"
+    },
+    {
+      "sha": "i7j8k9l",
+      "message": "feat: add OAuth2 login flow",
+      "author": "dev-carol",
+      "date": "2026-08-09T11:00:00Z"
+    },
+    {
+      "sha": "m0n1o2p",
+      "message": "fix: add cursor-based pagination to /data endpoint",
+      "author": "dev-carol",
+      "date": "2026-09-10T14:30:00Z"
+    }
+  ]
+}
