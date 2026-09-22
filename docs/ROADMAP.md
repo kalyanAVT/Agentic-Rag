@@ -26,11 +26,11 @@ met. Update the checkboxes as you go so future sessions know where things stand.
 - **Definition of done:** `make demo` runs the one canned question end-to-end
   against fake data and prints plan → evidence → cited answer.
 
-## Phase 2 — Real planner + real tool-calling (still local/mock data)
-- [ ] Replace the hardcoded plan with an LLM-driven planner (structured output)
-- [ ] Replace hardcoded tool functions with real LLM tool-calling (the model
+## Phase 2 — Real planner + real tool-calling (still local/mock data) ✅
+- [x] Replace the hardcoded plan with an LLM-driven planner (structured output)
+- [x] Replace hardcoded tool functions with real LLM tool-calling (the model
       chooses which tool to call, still against the local seed data)
-- [ ] Trace object grows to include the plan and tool-call args/results
+- [x] Trace object grows to include the plan and tool-call args/results
 - **Definition of done:** Two different questions against the same seed data
   produce two different, sensible plans and tool-call sequences.
 

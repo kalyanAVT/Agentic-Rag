@@ -126,14 +126,71 @@ def list_commits(since: str = "") -> list[EvidenceItem]:
     return results
 
 
+def get_issue(number: int) -> list[EvidenceItem]:
+    """
+    Get full details of a specific issue by number.
+
+    Returns the issue body and all comments as evidence.
+    """
+    for issue in SEED_DATA["issues"]:
+        if issue["number"] == number:
+            comment_text = ""
+            if issue["comments"]:
+                comment_text = " | Comments: " + " // ".join(
+                    f'{c["author"]}: {c["body"]}' for c in issue["comments"]
+                )
+
+            return [EvidenceItem(
+                source="issue",
+                id=f"issue-{issue['number']}",
+                text=f"[{', '.join(issue['labels'])}] {issue['title']} "
+                     f"(state: {issue['state']}): {issue['body']}{comment_text}",
+                url=f"https://github.com/{REPO}/issues/{issue['number']}",
+                timestamp=issue["created_at"],
+            )]
+
+    return []
+
+
+def list_recent_activity(since: str = "") -> list[EvidenceItem]:
+    """
+    Combined view of issues + commits since a date.
+
+    Custom wrapper tool per ARCHITECTURE.md -- combines search_issues +
+    list_commits filtered by date.
+    """
+    results: list[EvidenceItem] = []
+
+    # Recent issues
+    for issue in SEED_DATA["issues"]:
+        if since and issue["created_at"] < since:
+            continue
+        results.append(EvidenceItem(
+            source="issue",
+            id=f"issue-{issue['number']}",
+            text=f"[{', '.join(issue['labels'])}] {issue['title']} (state: {issue['state']})",
+            url=f"https://github.com/{REPO}/issues/{issue['number']}",
+            timestamp=issue["created_at"],
+        ))
+
+    # Recent commits
+    results.extend(list_commits(since=since))
+
+    # Sort by timestamp descending
+    results.sort(key=lambda e: e.timestamp, reverse=True)
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Tool registry + dispatch with tracing
 # ---------------------------------------------------------------------------
 
 TOOL_REGISTRY: dict[str, Any] = {
     "search_issues": search_issues,
+    "get_issue": get_issue,
     "list_pull_requests": list_pull_requests,
     "list_commits": list_commits,
+    "list_recent_activity": list_recent_activity,
 }
 
 

@@ -1,6 +1,7 @@
 """
-Demo runner — end-to-end pipeline for Phase 1.
+Demo runner -- end-to-end agentic pipeline.
 
+Phase 2: LLM-driven planner + LLM tool-calling against seed data.
 Run with: python -m src.demo
 Or:       make demo
 """
@@ -12,49 +13,42 @@ import uuid
 
 from dotenv import load_dotenv
 
+from src.agent import execute_plan_step
 from src.planner.planner import generate_plan
 from src.synthesis.synthesizer import synthesize
-from src.tools.mock_tools import call_tool
 from src.tracing.models import EvidenceItem, Trace
 
-# Load .env so OPENAI_API_KEY is available for synthesis
+# Load .env so OPENAI_API_KEY is available
 load_dotenv()
 
-# ── The canned demo question ────────────────────────────────────────────────
-DEMO_QUESTION = (
-    "Summarize what changed in Project X this quarter and identify major risks."
-)
+# -- Demo questions --------------------------------------------------------
+# Phase 2 requires two different questions producing different plans.
 
-# ── Tool-call routing for the hardcoded plan ────────────────────────────────
-# Maps tool_hint from PlanStep to (tool_name, args) for Phase 1.
-# In Phase 2, the LLM decides this dynamically.
-TOOL_DISPATCH = {
-    0: ("search_issues", {"query": "goals milestones planning"}),
-    1: ("list_pull_requests", {"state": "all"}),
-    2: ("search_issues", {"query": "blocker"}),
-}
+DEMO_QUESTIONS = [
+    "Summarize what changed in Project X this quarter and identify major risks.",
+    "What deadlines changed for Project X, and why?",
+]
 
 
-def run_demo() -> Trace:
-    """Execute the full hardcoded pipeline and return the trace."""
+def run_pipeline(question: str) -> Trace:
+    """Execute the full agentic pipeline for a single question."""
     run_id = str(uuid.uuid4())[:8]
     t_start = time.perf_counter_ns()
 
-    # 1. Plan
+    # 1. LLM-driven plan
     t_plan = time.perf_counter_ns()
-    plan = generate_plan(DEMO_QUESTION)
+    plan = generate_plan(question)
     timing = {"plan_ms": (time.perf_counter_ns() - t_plan) // 1_000_000}
 
-    # 2. Execute tools for each plan step
+    # 2. Execute each plan step with LLM tool-calling
     all_evidence: list[EvidenceItem] = []
     all_tool_calls = []
 
     t_tools = time.perf_counter_ns()
-    for i, step in enumerate(plan):
-        tool_name, args = TOOL_DISPATCH.get(i, ("search_issues", {"query": step.sub_question}))
-        evidence, tool_call = call_tool(tool_name, args)
+    for step in plan:
+        evidence, tool_calls = execute_plan_step(step, all_evidence)
         all_evidence.extend(evidence)
-        all_tool_calls.append(tool_call)
+        all_tool_calls.extend(tool_calls)
     timing["tools_ms"] = (time.perf_counter_ns() - t_tools) // 1_000_000
 
     # Deduplicate evidence by id
@@ -67,7 +61,7 @@ def run_demo() -> Trace:
 
     # 3. Synthesize
     t_synth = time.perf_counter_ns()
-    answer, citations = synthesize(DEMO_QUESTION, plan, unique_evidence)
+    answer, citations = synthesize(question, plan, unique_evidence)
     timing["synthesis_ms"] = (time.perf_counter_ns() - t_synth) // 1_000_000
 
     timing["total_ms"] = (time.perf_counter_ns() - t_start) // 1_000_000
@@ -75,7 +69,7 @@ def run_demo() -> Trace:
     # 4. Build trace
     trace = Trace(
         run_id=run_id,
-        question=DEMO_QUESTION,
+        question=question,
         plan=plan,
         tool_calls=all_tool_calls,
         evidence=unique_evidence,
@@ -138,5 +132,11 @@ def print_trace(trace: Trace) -> None:
 
 
 if __name__ == "__main__":
-    trace = run_demo()
-    print_trace(trace)
+    for i, question in enumerate(DEMO_QUESTIONS):
+        if i > 0:
+            print("\n" + "#" * 72)
+            print(f"#  DEMO QUESTION {i + 1}")
+            print("#" * 72)
+
+        trace = run_pipeline(question)
+        print_trace(trace)
