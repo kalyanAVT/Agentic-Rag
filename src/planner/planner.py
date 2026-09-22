@@ -102,6 +102,12 @@ def _fallback_plan(question: str) -> list[PlanStep]:
         tool_hint="search_issues",
     ))
 
+    if any(w in q_lower for w in ["pull request", "merged", "merge", "review"]):
+        steps.append(PlanStep(
+            sub_question="Which pull requests are relevant (merged or open)?",
+            tool_hint="list_pull_requests",
+        ))
+
     if any(w in q_lower for w in ["change", "update", "progress", "ship", "complete"]):
         steps.append(PlanStep(
             sub_question="What pull requests and code changes were made?",

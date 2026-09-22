@@ -107,28 +107,28 @@ def _fallback_synthesis(
     evidence: list[EvidenceItem],
 ) -> str:
     """
-    Fallback synthesis when no API key is available.
-    Produces a reasonable answer by summarizing the evidence directly.
+    Heuristic synthesis when no API key is available.
+
+    Presents the plan and the evidence actually gathered (with citation tags)
+    so `make demo` shows a complete, honest trace without an LLM. Set
+    OPENAI_API_KEY for a real analytical, cited answer.
     """
     lines = [
-        f"## Answer (fallback — no LLM API key set)\n",
+        "## Answer (fallback - no LLM API key set)\n",
         f"**Question:** {question}\n",
-        "**Summary based on available evidence:**\n",
+        "**Sub-questions investigated:**\n",
     ]
-
     for i, step in enumerate(plan):
-        lines.append(f"### {step.sub_question}\n")
-        relevant = [
-            (j, e) for j, e in enumerate(evidence)
-            if any(
-                keyword in e.text.lower()
-                for keyword in step.sub_question.lower().split()[:3]
-            )
-        ]
-        if relevant:
-            for j, e in relevant:
-                lines.append(f"- {e.text[:200]}... [E{j+1}]\n")
-        else:
-            lines.append("- No directly matching evidence found.\n")
+        hint = f" (via {step.tool_hint})" if step.tool_hint else ""
+        lines.append(f"{i + 1}. {step.sub_question}{hint}\n")
+
+    lines.append("")
+    if evidence:
+        lines.append(f"**Evidence collected ({len(evidence)} items):**\n")
+        for j, e in enumerate(evidence):
+            snippet = e.text[:200].replace("\n", " ")
+            lines.append(f"- [E{j + 1}] ({e.source} {e.id}): {snippet}\n")
+    else:
+        lines.append("_The tools returned no evidence for this question._\n")
 
     return "\n".join(lines)

@@ -14,8 +14,15 @@ import os
 import time
 from typing import Any
 
-from src.tools.mock_tools import TOOL_REGISTRY, call_tool
+from src.tools import mock_tools, github_tools
 from src.tracing.models import EvidenceItem, PlanStep, ToolCall
+
+
+def _get_active_tools():
+    if github_tools.TOOL_REGISTRY:
+        return github_tools.call_tool
+    return mock_tools.call_tool
+
 
 
 # -- OpenAI tool definitions -----------------------------------------------
@@ -201,7 +208,8 @@ def _llm_tool_call(
             except json.JSONDecodeError:
                 args = {}
 
-            evidence, tool_record = call_tool(tool_name, args)
+            call_func = _get_active_tools()
+            evidence, tool_record = call_func(tool_name, args)
             all_evidence.extend(evidence)
             all_tool_calls.append(tool_record)
 
@@ -217,15 +225,16 @@ def _fallback_tool_call(
 ) -> tuple[list[EvidenceItem], list[ToolCall]]:
     """Heuristic tool dispatch when no API key is available."""
     hint = (step.tool_hint or "search_issues").lower()
+    call_func = _get_active_tools()
 
     if hint == "list_pull_requests":
-        return call_tool("list_pull_requests", {"state": "all"})
+        tool_name, args = "list_pull_requests", {"state": "all"}
     elif hint == "list_commits":
-        return call_tool("list_commits", {"since": ""})
+        tool_name, args = "list_commits", {"since": ""}
     elif hint == "list_recent_activity":
-        return call_tool("list_recent_activity", {"since": "2026-07-01"})
+        tool_name, args = "list_recent_activity", {"since": "2026-07-01"}
     elif hint == "get_issue":
-        return call_tool("search_issues", {"query": step.sub_question[:30]})
+        tool_name, args = "search_issues", {"query": step.sub_question[:30]}
     else:
         # Default: search with keywords from the sub-question
         words = step.sub_question.lower().split()
@@ -235,4 +244,9 @@ def _fallback_tool_call(
                 "is", "was", "has", "have", "been", "any", "which", "did"}
         keywords = [w for w in words if w not in stop][:4]
         query = " ".join(keywords) if keywords else step.sub_question[:30]
-        return call_tool("search_issues", {"query": query})
+        tool_name, args = "search_issues", {"query": query}
+
+    # call_tool() returns a single ToolCall; wrap it so the return type
+    # matches the (evidence, list[ToolCall]) contract the caller expects.
+    evidence, tool_record = call_func(tool_name, args)
+    return evidence, [tool_record]

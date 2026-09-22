@@ -10,23 +10,24 @@ from __future__ import annotations
 
 import time
 import uuid
+import sys
 
 from dotenv import load_dotenv
+
+# Load .env BEFORE importing src modules so os.getenv("GITHUB_REPO") is available at import time
+load_dotenv()
 
 from src.agent import execute_plan_step
 from src.planner.planner import generate_plan
 from src.synthesis.synthesizer import synthesize
 from src.tracing.models import EvidenceItem, Trace
 
-# Load .env so OPENAI_API_KEY is available
-load_dotenv()
-
 # -- Demo questions --------------------------------------------------------
 # Phase 2 requires two different questions producing different plans.
 
 DEMO_QUESTIONS = [
-    "Summarize what changed in Project X this quarter and identify major risks.",
-    "What deadlines changed for Project X, and why?",
+    "What are the most recent merged pull requests in this repository?",
+    "Are there any open issues regarding reinforcement learning algorithms?",
 ]
 
 
@@ -81,54 +82,55 @@ def run_pipeline(question: str) -> Trace:
     return trace
 
 
-def print_trace(trace: Trace) -> None:
-    """Pretty-print the trace to stdout."""
-    sep = "=" * 72
+def print_trace(trace: Trace):
+    """Pretty-print the pipeline trace."""
+    def safe_print(s):
+        print(str(s).encode(sys.stdout.encoding or 'ascii', 'replace').decode(sys.stdout.encoding or 'ascii'))
 
-    print(f"\n{sep}")
-    print(f"  AGENTIC RAG -- Demo Run [{trace.run_id}]")
-    print(f"{sep}\n")
+    sep = "=" * 72
+    safe_print(f"\n{sep}")
+    safe_print(f"  AGENTIC RAG -- Demo Run [{trace.run_id}]")
+    safe_print(f"{sep}\n")
 
     # Question
-    print(f"[?] QUESTION: {trace.question}\n")
+    safe_print(f"[?] QUESTION: {trace.question}\n")
 
     # Plan
-    print("[PLAN]")
+    safe_print("[PLAN]")
     for i, step in enumerate(trace.plan):
-        hint = f" -> {step.tool_hint}" if step.tool_hint else ""
-        print(f"   {i+1}. {step.sub_question}{hint}")
-    print()
+        safe_print(f"   {i+1}. {step.sub_question} -> {step.tool_hint}")
+    safe_print("")
 
     # Tool calls
-    print("[TOOLS]")
+    safe_print("[TOOLS]")
     for tc in trace.tool_calls:
         status = "OK" if tc.success else "FAIL"
         n_results = len(tc.result) if isinstance(tc.result, list) else 0
-        print(f"   [{status}] {tc.tool_name}({tc.args}) -> {n_results} results ({tc.latency_ms}ms)")
-    print()
+        safe_print(f"   [{status}] {tc.tool_name}({tc.args}) -> {n_results} results ({tc.latency_ms}ms)")
+    safe_print("")
 
     # Evidence
-    print(f"[EVIDENCE] ({len(trace.evidence)} items)")
+    safe_print(f"[EVIDENCE] ({len(trace.evidence)} items)")
     for i, e in enumerate(trace.evidence):
-        print(f"   [E{i+1}] ({e.source} {e.id}): {e.text[:100]}...")
-    print()
+        safe_print(f"   [E{i+1}] ({e.source} {e.id}): {e.text[:100]}...")
+    safe_print("")
 
     # Answer
-    print("[ANSWER]")
+    safe_print("[ANSWER]")
     for line in trace.answer.split("\n"):
-        print(f"   {line}")
-    print()
+        safe_print(f"   {line}")
+    safe_print("")
 
     # Citations
     if trace.citations:
-        print("[CITATIONS]")
+        safe_print("[CITATIONS]")
         for c in trace.citations:
-            print(f"   {c.claim} -> {c.evidence_id} ({c.url})")
-        print()
+            safe_print(f"   {c.claim} -> {c.evidence_id} ({c.url})")
+        safe_print("")
 
     # Timing
-    print(f"[TIMING] {trace.timing_ms}")
-    print(f"\n{sep}\n")
+    safe_print(f"[TIMING] {trace.timing_ms}")
+    safe_print(f"\n{sep}\n")
 
 
 if __name__ == "__main__":
