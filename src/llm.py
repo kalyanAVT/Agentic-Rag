@@ -26,6 +26,13 @@ from typing import Any
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
+# Per-request timeout (seconds) and retry cap. Kept short so a slow or stuck
+# provider (e.g. a stalled free-tier backend) degrades to the deterministic
+# offline fallback quickly instead of hanging the whole pipeline. Override via
+# LLM_TIMEOUT / LLM_MAX_RETRIES in .env.
+DEFAULT_TIMEOUT = 30.0
+DEFAULT_MAX_RETRIES = 1
+
 # Placeholder keys that mean "no real key configured" -> offline fallback path.
 _PLACEHOLDER_KEYS = {"", "sk-change-me"}
 
@@ -45,16 +52,38 @@ def get_model() -> str:
     return os.getenv("LLM_MODEL", DEFAULT_MODEL)
 
 
+def _get_float(name: str, default: float) -> float:
+    """Read a float env var, falling back to default on unset/invalid values."""
+    try:
+        return float(os.getenv(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+def _get_int(name: str, default: int) -> int:
+    """Read an int env var, falling back to default on unset/invalid values."""
+    try:
+        return int(os.getenv(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
 def get_client() -> Any:
     """Construct an OpenAI-compatible client for the configured provider.
 
     Honors LLM_BASE_URL so the same SDK can target OpenAI, OpenRouter, xAI Grok,
-    etc. The openai package is imported lazily so importing this module never
-    hard-requires it.
+    etc. A bounded timeout and retry cap ensure a slow or stuck provider surfaces
+    as an exception the call sites catch, degrading to the offline fallback rather
+    than blocking indefinitely. The openai package is imported lazily so importing
+    this module never hard-requires it.
     """
     from openai import OpenAI
 
-    kwargs: dict[str, Any] = {"api_key": get_api_key()}
+    kwargs: dict[str, Any] = {
+        "api_key": get_api_key(),
+        "timeout": _get_float("LLM_TIMEOUT", DEFAULT_TIMEOUT),
+        "max_retries": _get_int("LLM_MAX_RETRIES", DEFAULT_MAX_RETRIES),
+    }
     base_url = os.getenv("LLM_BASE_URL", "").strip()
     if base_url:
         kwargs["base_url"] = base_url

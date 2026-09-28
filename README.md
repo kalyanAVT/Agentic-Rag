@@ -106,6 +106,8 @@ code change. Configure it in `.env` (see [`.env.example`](.env.example)):
 | `LLM_API_KEY` | Provider API key. Overrides `OPENAI_API_KEY` if set. |
 | `LLM_BASE_URL` | OpenAI-compatible endpoint. Leave unset for OpenAI. |
 | `LLM_MODEL` | Model id (default `gpt-4o-mini`). |
+| `LLM_TIMEOUT` | Per-request timeout in seconds (default `30`). Bounds a stuck provider. |
+| `LLM_MAX_RETRIES` | SDK retry cap (default `1`). |
 
 **OpenAI** (default) — just set `OPENAI_API_KEY`.
 
@@ -114,8 +116,14 @@ code change. Configure it in `.env` (see [`.env.example`](.env.example)):
 ```dotenv
 LLM_API_KEY=sk-or-v1-your-key
 LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL=google/gemini-2.0-flash-exp:free
+LLM_MODEL=openrouter/free
 ```
+
+`openrouter/free` is an auto-router that spreads each call across many free
+backends, so it sidesteps any single provider's rate limit — more reliable for
+a multi-call run than pinning one free model (which shares an upstream quota pool
+and returns HTTP 429 under load). You can still pin a specific model
+(e.g. `google/gemini-2.0-flash-exp:free`) if you prefer deterministic routing.
 
 **xAI Grok:**
 
@@ -126,11 +134,13 @@ LLM_MODEL=grok-2-latest
 ```
 
 > The planner (structured output) and agent (tool-calling) need a model that
-> supports those features — `google/gemini-2.0-flash-exp:free` and the Grok
-> models do. If a chosen model lacks them, those stages fall back to the
-> deterministic path automatically; the demo never crashes. Every LLM call site
-> is wrapped so any auth/rate-limit/network error degrades to the offline path
-> (locked in by [`tests/test_resilience.py`](tests/test_resilience.py)).
+> supports those features — the Grok models and the capable free models the
+> router selects do. If a chosen model lacks them, returns empty content, or is
+> slow, that stage falls back to the deterministic path automatically; the demo
+> never crashes. Every LLM call site is wrapped so any auth/rate-limit/network
+> error degrades to the offline path, and the client uses a bounded per-request
+> timeout (`LLM_TIMEOUT`, default 30s) so a stuck provider can't hang the run
+> (resilience locked in by [`tests/test_resilience.py`](tests/test_resilience.py)).
 
 ## Data source
 

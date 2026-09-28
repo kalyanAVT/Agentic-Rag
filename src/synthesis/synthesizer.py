@@ -111,7 +111,12 @@ def synthesize(
 
 
 def _call_openai(prompt: str) -> str:
-    """Make a real LLM API call for synthesis (OpenAI-compatible provider)."""
+    """Make a real LLM API call for synthesis (OpenAI-compatible provider).
+
+    Raises if the provider returns empty content so the caller degrades to the
+    offline fallback -- an honest evidence digest beats a blank, citation-less
+    answer (some free-tier backends occasionally return empty completions).
+    """
     client = get_client()
     response = client.chat.completions.create(
         model=get_model(),
@@ -119,7 +124,10 @@ def _call_openai(prompt: str) -> str:
         temperature=0.3,
         max_tokens=1024,
     )
-    return response.choices[0].message.content or ""
+    answer = (response.choices[0].message.content or "").strip()
+    if not answer:
+        raise ValueError("LLM returned empty content")
+    return answer
 
 
 def _fallback_synthesis(
