@@ -10,12 +10,15 @@ Spec: docs/ARCHITECTURE.md section 2 (Tool layer)
 
 from __future__ import annotations
 
-import os
+import logging
 import time
 from typing import Any
 
+from src.llm import get_client, get_model, llm_enabled
 from src.tools import mock_tools, github_tools
 from src.tracing.models import EvidenceItem, PlanStep, ToolCall
+
+logger = logging.getLogger(__name__)
 
 
 def _get_active_tools():
@@ -145,25 +148,19 @@ def execute_plan_step(
 
     Returns (evidence_items, tool_call_records).
     """
-    api_key = os.getenv("OPENAI_API_KEY", "")
-
-    if api_key and api_key != "sk-change-me":
-        return _llm_tool_call(step, prior_evidence, api_key)
-    else:
-        return _fallback_tool_call(step)
+    if llm_enabled():
+        return _llm_tool_call(step, prior_evidence)
+    return _fallback_tool_call(step)
 
 
 def _llm_tool_call(
     step: PlanStep,
     prior_evidence: list[EvidenceItem],
-    api_key: str,
 ) -> tuple[list[EvidenceItem], list[ToolCall]]:
-    """Use OpenAI tool-calling to decide which tool to invoke."""
+    """Use OpenAI-compatible tool-calling to decide which tool to invoke."""
     import json
 
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key)
+    client = get_client()
 
     # Build context from prior evidence (brief summaries only)
     context = ""
@@ -187,13 +184,19 @@ def _llm_tool_call(
         },
     ]
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        tools=OPENAI_TOOLS,
-        tool_choice="required",
-        temperature=0.1,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=get_model(),
+            messages=messages,
+            tools=OPENAI_TOOLS,
+            tool_choice="required",
+            temperature=0.1,
+        )
+    except Exception as exc:  # noqa: BLE001 - any API failure degrades gracefully
+        logger.warning(
+            "Agent tool-call LLM request failed (%s); using offline fallback.", exc
+        )
+        return _fallback_tool_call(step)
 
     all_evidence: list[EvidenceItem] = []
     all_tool_calls: list[ToolCall] = []

@@ -46,6 +46,13 @@ demo:
 	$(VENV_BIN)/python -m src.demo
 
 # ---------------------------------------------------------------------------
+# seed-memory — populate long-term memory with prior-session facts (Phase 4)
+# ---------------------------------------------------------------------------
+.PHONY: seed-memory
+seed-memory:
+	$(VENV_BIN)/python scripts/seed_memory.py
+
+# ---------------------------------------------------------------------------
 # deploy — build + push + deploy to DigitalOcean (Phase 7+)
 # ---------------------------------------------------------------------------
 .PHONY: deploy

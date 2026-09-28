@@ -6,16 +6,20 @@ Phase 1: real OpenAI call with fallback to placeholder if no API key.
 
 from __future__ import annotations
 
-import os
+import logging
 import re
 
-from src.tracing.models import Citation, EvidenceItem, PlanStep
+from src.llm import get_client, get_model, llm_enabled
+from src.tracing.models import Citation, EvidenceItem, MemoryEntry, PlanStep
+
+logger = logging.getLogger(__name__)
 
 
 def _build_prompt(
     question: str,
     plan: list[PlanStep],
     evidence: list[EvidenceItem],
+    memory: list[MemoryEntry] | None = None,
 ) -> str:
     """Build the synthesis prompt with numbered evidence items."""
     evidence_block = "\n".join(
@@ -26,6 +30,17 @@ def _build_prompt(
     plan_block = "\n".join(
         f"  {i+1}. {step.sub_question}" for i, step in enumerate(plan)
     )
+
+    memory_block = ""
+    if memory:
+        recalled = "\n".join(f"[M{i+1}] {m.text}" for i, m in enumerate(memory))
+        memory_block = f"""
+
+MEMORY RECALLED FROM PRIOR SESSIONS:
+{recalled}
+
+When prior memory is relevant, state what was previously decided and whether the
+current evidence shows it is still on track or has changed. Cite memory as [M1], [M2]."""
 
     return f"""You are a project analyst. Answer the user's question using ONLY the
 evidence provided below. Cite every factual claim using the evidence tags
@@ -38,7 +53,7 @@ PLAN (sub-questions investigated):
 {plan_block}
 
 EVIDENCE:
-{evidence_block}
+{evidence_block}{memory_block}
 
 Provide a clear, structured answer with inline citations like [E1], [E2], etc."""
 
@@ -68,32 +83,38 @@ def synthesize(
     question: str,
     plan: list[PlanStep],
     evidence: list[EvidenceItem],
+    memory: list[MemoryEntry] | None = None,
 ) -> tuple[str, list[Citation]]:
     """
     Generate a cited answer from the question, plan, and evidence.
 
-    Uses OpenAI if OPENAI_API_KEY is set; otherwise falls back to a
-    simple concatenation so `make demo` works without credentials.
+    Uses the configured LLM if a real API key is set; otherwise falls back
+    to a simple concatenation so `make demo` works without credentials. Any
+    relevant long-term `memory` is woven in so the answer can reference
+    what prior sessions decided (see docs/ARCHITECTURE.md section 3).
     """
-    prompt = _build_prompt(question, plan, evidence)
-    api_key = os.getenv("OPENAI_API_KEY", "")
+    prompt = _build_prompt(question, plan, evidence, memory)
 
-    if api_key and api_key != "sk-change-me":
-        answer = _call_openai(prompt, api_key)
+    if llm_enabled():
+        try:
+            answer = _call_openai(prompt)
+        except Exception as exc:  # noqa: BLE001 - any API failure degrades gracefully
+            logger.warning(
+                "Synthesis LLM call failed (%s); using offline fallback.", exc
+            )
+            answer = _fallback_synthesis(question, plan, evidence, memory)
     else:
-        answer = _fallback_synthesis(question, plan, evidence)
+        answer = _fallback_synthesis(question, plan, evidence, memory)
 
     citations = _parse_citations(answer, evidence)
     return answer, citations
 
 
-def _call_openai(prompt: str, api_key: str) -> str:
-    """Make a real OpenAI API call for synthesis."""
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key)
+def _call_openai(prompt: str) -> str:
+    """Make a real LLM API call for synthesis (OpenAI-compatible provider)."""
+    client = get_client()
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=get_model(),
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=1024,
@@ -105,13 +126,14 @@ def _fallback_synthesis(
     question: str,
     plan: list[PlanStep],
     evidence: list[EvidenceItem],
+    memory: list[MemoryEntry] | None = None,
 ) -> str:
     """
     Heuristic synthesis when no API key is available.
 
-    Presents the plan and the evidence actually gathered (with citation tags)
-    so `make demo` shows a complete, honest trace without an LLM. Set
-    OPENAI_API_KEY for a real analytical, cited answer.
+    Presents the plan, any recalled long-term memory, and the evidence actually
+    gathered (with citation tags) so `make demo` shows a complete, honest trace
+    without an LLM. Set a real LLM API key for a real analytical, cited answer.
     """
     lines = [
         "## Answer (fallback - no LLM API key set)\n",
@@ -123,6 +145,12 @@ def _fallback_synthesis(
         lines.append(f"{i + 1}. {step.sub_question}{hint}\n")
 
     lines.append("")
+    if memory:
+        lines.append(f"**Recalled from prior sessions ({len(memory)}):**\n")
+        for k, m in enumerate(memory):
+            lines.append(f"- [M{k + 1}] {m.text}\n")
+        lines.append("")
+
     if evidence:
         lines.append(f"**Evidence collected ({len(evidence)} items):**\n")
         for j, e in enumerate(evidence):

@@ -51,12 +51,13 @@ met. Update the checkboxes as you go so future sessions know where things stand.
   `docs/PROJECT_BRIEF.md` work correctly against the live `demo-project-x`
   GitHub repo.
 
-## Phase 4 — Memory
-- [ ] Implement long-term memory store (SQLite) with the write-back policy
+## Phase 4 — Memory ✅
+- [x] Implement long-term memory store (SQLite) with the write-back policy
       described in `docs/ARCHITECTURE.md` (atomic facts, not transcripts)
-- [ ] Implement memory retrieval feeding into the planner
-- [ ] Implement short-term/session memory (in-process)
-- [ ] Add at least one demo scenario that proves cross-session recall (e.g.
+- [x] Implement memory retrieval feeding into the planner (keyword/tag overlap;
+      also fed into synthesis so recalled facts are reconciled + cited)
+- [x] Implement short-term/session memory (in-process)
+- [x] Add at least one demo scenario that proves cross-session recall (e.g.
       state a fact/preference in run 1, confirm it's used unprompted in run 2)
 - **Definition of done:** the memory-recall demo question from
   `docs/PROJECT_BRIEF.md` visibly uses a memory entry from a prior session.

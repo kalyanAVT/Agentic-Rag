@@ -9,6 +9,7 @@ Phase 3: replaced with real MCP tool calls against live GitHub.
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -30,14 +31,80 @@ REPO = SEED_DATA["repo"]
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+# Function words + generic glue that shouldn't drive a keyword search. Keeping
+# these out stops multi-word queries (e.g. a memory-reconcile sub-question) from
+# matching every issue on a stopword like "and"/"status".
+_SEARCH_STOPWORDS = {
+    "and", "the", "for", "was", "are", "were", "has", "have", "been", "did",
+    "does", "any", "all", "about", "which", "what", "when", "where", "why",
+    "how", "this", "that", "with", "from", "into", "over", "current", "status",
+    "whether", "still", "track", "related", "regarding", "most", "recent",
+}
+
+
+def _keywords(text: str) -> set[str]:
+    """Meaningful search tokens: alphanumeric, length >= 3, minus stopwords."""
+    return {
+        tok
+        for tok in re.split(r"[^a-z0-9]+", text.lower())
+        if len(tok) >= 3 and tok not in _SEARCH_STOPWORDS
+    }
+
+
+def _issue_evidence(issue: dict[str, Any]) -> EvidenceItem:
+    """Build a rich EvidenceItem for an issue, including its comments."""
+    comment_text = ""
+    if issue["comments"]:
+        comment_text = " | Comments: " + " // ".join(
+            f'{c["author"]}: {c["body"]}' for c in issue["comments"]
+        )
+    return EvidenceItem(
+        source="issue",
+        id=f"issue-{issue['number']}",
+        text=f"[{', '.join(issue['labels'])}] {issue['title']} "
+             f"(state: {issue['state']}): {issue['body']}{comment_text}",
+        url=f"https://github.com/{REPO}/issues/{issue['number']}",
+        timestamp=issue["created_at"],
+    )
+
+
+def _pr_evidence(pr: dict[str, Any]) -> EvidenceItem:
+    """Build a rich EvidenceItem for a pull request, including reviews."""
+    review_text = ""
+    if pr["review_comments"]:
+        review_text = " | Reviews: " + " // ".join(
+            f'{r["author"]}: {r["body"]}' for r in pr["review_comments"]
+        )
+    closes_text = ""
+    if pr.get("closes_issues"):
+        closes_text = f" | Closes: #{', #'.join(str(i) for i in pr['closes_issues'])}"
+    return EvidenceItem(
+        source="pull_request",
+        id=f"pr-{pr['number']}",
+        text=f"{pr['title']} (state: {pr['state']}): "
+             f"{pr['body']}{closes_text}{review_text}",
+        url=f"https://github.com/{REPO}/pull/{pr['number']}",
+        timestamp=pr.get("merged_at") or pr["created_at"],
+    )
+
+
 def search_issues(query: str) -> list[EvidenceItem]:
     """
-    Keyword-search over seed issues (title, labels, body, comments).
+    Keyword-search over seed issues AND pull requests (title, labels, body,
+    comments/reviews).
 
-    Returns matching issues as EvidenceItem objects.
+    Mirrors GitHub's search API, which returns both issues and PRs and matches
+    on token overlap rather than treating the whole query as one phrase. Results
+    are ranked by how many query keywords they match (most first), so a
+    multi-topic query surfaces its most relevant hits at the top.
     """
-    query_lower = query.lower()
-    results: list[EvidenceItem] = []
+    query_lower = query.lower().strip()
+    q_keywords = _keywords(query)
+
+    # (score, insertion_order, item) -- insertion_order gives a stable tiebreak
+    # (issues before PRs) so equal-score results stay deterministic.
+    scored: list[tuple[int, int, EvidenceItem]] = []
+    order = 0
 
     for issue in SEED_DATA["issues"]:
         searchable = " ".join([
@@ -46,27 +113,29 @@ def search_issues(query: str) -> list[EvidenceItem]:
             issue["body"],
             " ".join(c["body"] for c in issue["comments"]),
         ]).lower()
+        overlap = q_keywords & _keywords(searchable)
+        label_hit = any(label in query_lower for label in issue["labels"])
+        phrase_hit = bool(query_lower) and query_lower in searchable
+        if overlap or label_hit or phrase_hit:
+            score = len(overlap) + (1 if label_hit else 0) + (1 if phrase_hit else 0)
+            scored.append((score, order, _issue_evidence(issue)))
+        order += 1
 
-        if query_lower in searchable or any(
-            label in query_lower for label in issue["labels"]
-        ):
-            # Build a rich text summary including comments
-            comment_text = ""
-            if issue["comments"]:
-                comment_text = " | Comments: " + " // ".join(
-                    f'{c["author"]}: {c["body"]}' for c in issue["comments"]
-                )
+    for pr in SEED_DATA["pull_requests"]:
+        searchable = " ".join([
+            pr["title"],
+            pr["body"],
+            " ".join(r["body"] for r in pr["review_comments"]),
+        ]).lower()
+        overlap = q_keywords & _keywords(searchable)
+        phrase_hit = bool(query_lower) and query_lower in searchable
+        if overlap or phrase_hit:
+            score = len(overlap) + (1 if phrase_hit else 0)
+            scored.append((score, order, _pr_evidence(pr)))
+        order += 1
 
-            results.append(EvidenceItem(
-                source="issue",
-                id=f"issue-{issue['number']}",
-                text=f"[{', '.join(issue['labels'])}] {issue['title']} "
-                     f"(state: {issue['state']}): {issue['body']}{comment_text}",
-                url=f"https://github.com/{REPO}/issues/{issue['number']}",
-                timestamp=issue["created_at"],
-            ))
-
-    return results
+    scored.sort(key=lambda t: (-t[0], t[1]))  # score desc, then stable by order
+    return [item for _, _, item in scored]
 
 
 def list_pull_requests(state: str = "all") -> list[EvidenceItem]:

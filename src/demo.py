@@ -18,9 +18,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.agent import execute_plan_step
+from src.memory.seed import seed_prior_session
+from src.memory.session import SessionMemory
+from src.memory.store import MemoryStore
+from src.memory.writeback import extract_memories
 from src.planner.planner import generate_plan
 from src.synthesis.synthesizer import synthesize
-from src.tracing.models import EvidenceItem, Trace
+from src.tracing.models import MemoryEntry, Trace
 
 # -- Demo questions --------------------------------------------------------
 # Phase 2 requires two different questions producing different plans.
@@ -28,52 +32,68 @@ from src.tracing.models import EvidenceItem, Trace
 DEMO_QUESTIONS = [
     "What are the most recent merged pull requests in this repository?",
     "Are there any open issues regarding reinforcement learning algorithms?",
+    # Cross-session recall: retrieves a fact seeded by a "prior session"
+    # (see src/memory/seed.py) and reconciles it against current evidence.
+    "What did we decide about the dashboard pagination fix, and is it still on track?",
 ]
 
 
-def run_pipeline(question: str) -> Trace:
-    """Execute the full agentic pipeline for a single question."""
+def run_pipeline(question: str, store: MemoryStore | None = None) -> Trace:
+    """Execute the full agentic pipeline for a single question.
+
+    Phase 4 adds memory: relevant long-term facts are retrieved before
+    planning and fed into the planner + synthesis; durable new facts are
+    written back after synthesis. Both ends are recorded on the trace
+    (memory_used / memory_written).
+    """
     run_id = str(uuid.uuid4())[:8]
     t_start = time.perf_counter_ns()
 
-    # 1. LLM-driven plan
+    # 0. Recall relevant long-term memory (empty if none relevant / no store)
+    memory_used: list[MemoryEntry] = store.retrieve(question) if store else []
+
+    # 1. LLM-driven plan (memory-aware)
     t_plan = time.perf_counter_ns()
-    plan = generate_plan(question)
+    plan = generate_plan(question, memory_used)
     timing = {"plan_ms": (time.perf_counter_ns() - t_plan) // 1_000_000}
 
-    # 2. Execute each plan step with LLM tool-calling
-    all_evidence: list[EvidenceItem] = []
+    # 2. Execute each plan step; SessionMemory holds working evidence (deduped)
+    session = SessionMemory()
     all_tool_calls = []
 
     t_tools = time.perf_counter_ns()
     for step in plan:
-        evidence, tool_calls = execute_plan_step(step, all_evidence)
-        all_evidence.extend(evidence)
+        session.record_step(step)
+        evidence, tool_calls = execute_plan_step(step, session.evidence)
+        session.add_evidence(evidence)
         all_tool_calls.extend(tool_calls)
     timing["tools_ms"] = (time.perf_counter_ns() - t_tools) // 1_000_000
 
-    # Deduplicate evidence by id
-    seen_ids: set[str] = set()
-    unique_evidence: list[EvidenceItem] = []
-    for e in all_evidence:
-        if e.id not in seen_ids:
-            seen_ids.add(e.id)
-            unique_evidence.append(e)
+    evidence = session.evidence
 
-    # 3. Synthesize
+    # 3. Synthesize (memory-aware)
     t_synth = time.perf_counter_ns()
-    answer, citations = synthesize(question, plan, unique_evidence)
+    answer, citations = synthesize(question, plan, evidence, memory_used)
     timing["synthesis_ms"] = (time.perf_counter_ns() - t_synth) // 1_000_000
+
+    # 4. Write-back: persist any durable new facts (online only; no-op offline)
+    memory_written: list[MemoryEntry] = []
+    if store:
+        for entry in extract_memories(question, answer, evidence, run_id):
+            if store.add(entry):
+                memory_written.append(entry)
 
     timing["total_ms"] = (time.perf_counter_ns() - t_start) // 1_000_000
 
-    # 4. Build trace
+    # 5. Build trace
     trace = Trace(
         run_id=run_id,
         question=question,
+        memory_used=memory_used,
         plan=plan,
         tool_calls=all_tool_calls,
-        evidence=unique_evidence,
+        evidence=evidence,
+        memory_written=memory_written,
         answer=answer,
         citations=citations,
         timing_ms=timing,
@@ -94,6 +114,14 @@ def print_trace(trace: Trace):
 
     # Question
     safe_print(f"[?] QUESTION: {trace.question}\n")
+
+    # Memory recalled from prior sessions
+    if trace.memory_used:
+        safe_print(f"[MEMORY USED] ({len(trace.memory_used)} recalled)")
+        for m in trace.memory_used:
+            tags = ", ".join(m.topic_tags)
+            safe_print(f"   [M] {m.text}  <tags: {tags}>")
+        safe_print("")
 
     # Plan
     safe_print("[PLAN]")
@@ -128,17 +156,32 @@ def print_trace(trace: Trace):
             safe_print(f"   {c.claim} -> {c.evidence_id} ({c.url})")
         safe_print("")
 
+    # Memory written (new durable facts persisted this run)
+    if trace.memory_written:
+        safe_print(f"[MEMORY WRITTEN] ({len(trace.memory_written)} persisted)")
+        for m in trace.memory_written:
+            safe_print(f"   [+] {m.text}")
+        safe_print("")
+
     # Timing
     safe_print(f"[TIMING] {trace.timing_ms}")
     safe_print(f"\n{sep}\n")
 
 
 if __name__ == "__main__":
+    # Long-term memory store, seeded with a few facts from a "prior session"
+    # so the cross-session recall question has something to recall offline.
+    store = MemoryStore()
+    n_seeded = seed_prior_session(store)
+    print(f"[memory] {store.count()} long-term facts available ({n_seeded} newly seeded)")
+
     for i, question in enumerate(DEMO_QUESTIONS):
         if i > 0:
             print("\n" + "#" * 72)
             print(f"#  DEMO QUESTION {i + 1}")
             print("#" * 72)
 
-        trace = run_pipeline(question)
+        trace = run_pipeline(question, store)
         print_trace(trace)
+
+    store.close()
