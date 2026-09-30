@@ -12,3 +12,6 @@ venv/
 # Long-term memory store (runtime data; regenerate with scripts/seed_memory.py)
 *.db
 src/data/memory.db
+
+# Persisted run traces (Phase 5 observability; regenerated on every run)
+traces/

@@ -62,12 +62,22 @@ met. Update the checkboxes as you go so future sessions know where things stand.
 - **Definition of done:** the memory-recall demo question from
   `docs/PROJECT_BRIEF.md` visibly uses a memory entry from a prior session.
 
-## Phase 5 — Observability
-- [ ] Wire up LangSmith or Langfuse tracing around planner/tool/synthesis calls
-- [ ] Persist the structured `Trace` JSON per run (for the frontend, independent
-      of the third-party dashboard)
+## Phase 5 — Observability ✅
+- [x] Wire up LangSmith or Langfuse tracing around planner/tool/synthesis calls
+      (Langfuse chosen; `src/tracing/observability.py` `emit_trace()` ships one
+      trace + planner/tool/synthesis spans per run. Env-gated + graceful no-op
+      offline, mirroring `src/llm.py`, so `make demo` needs no key.)
+- [x] Persist the structured `Trace` JSON per run (for the frontend, independent
+      of the third-party dashboard) — `src/tracing/store.py` writes
+      `traces/<ts>-<run_id>.json`; exposed via `GET /runs` + `GET /runs/{run_id}`.
+      `POST /ask` runs the pipeline, persists, and returns the Trace.
 - **Definition of done:** a run shows up in the LangSmith/Langfuse dashboard
   AND the same run's trace JSON is retrievable from your own API.
+  - JSON-half **verified**: `make demo` writes one file per run; the API lists
+    and fetches them (see `tests/test_tracing_store.py`, `tests/test_api_runs.py`).
+  - Dashboard-half **wired but not lit here** (no Langfuse key in this env): set
+    `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` in `.env` to light it up; the
+    hook is a verified no-op until then, so nothing breaks offline.
 
 ## Phase 6 — Frontend
 - [ ] Minimal single-page UI: question input + expandable trace sections

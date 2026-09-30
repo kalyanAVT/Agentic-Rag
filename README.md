@@ -6,11 +6,13 @@ sub-questions, calls tools to gather evidence, reconciles that against long-term
 memory from prior sessions, and produces a **cited answer** — while emitting a
 full structured **trace** of every step: `plan → tool calls → evidence → memory → answer`.
 
-> **Status: working MVP (Phases 0–4).** The full pipeline runs end-to-end today.
-> It is **provider-agnostic** (OpenAI / OpenRouter / xAI Grok) and, with no API
-> key, degrades gracefully to a deterministic **offline path** so `make demo`
-> always produces a complete trace. Live GitHub verification, observability
-> dashboards, the web UI, and deployment are the remaining phases (see
+> **Status: working MVP (Phases 0–5).** The full pipeline runs end-to-end today
+> and every run is **traced** — persisted as JSON and served from an HTTP API
+> (`POST /ask`, `GET /runs`, `GET /runs/{run_id}`), with an optional Langfuse
+> dashboard hook. It is **provider-agnostic** (OpenAI / OpenRouter / xAI Grok)
+> and, with no API key, degrades gracefully to a deterministic **offline path**
+> so `make demo` always produces a complete trace. Live GitHub verification, the
+> web UI, and deployment are the remaining phases (see
 > [Roadmap status](#roadmap-status)).
 
 ## What it does
@@ -68,9 +70,10 @@ provider can be swapped without a rewrite. See [`docs/ARCHITECTURE.md`](docs/ARC
 | Agent | [`src/agent.py`](src/agent.py) | LLM tool-calling loop per sub-question |
 | Memory | [`src/memory/`](src/memory/) | Long-term store (SQLite) + session memory + selective write-back |
 | Synthesis | [`src/synthesis/`](src/synthesis/) | Cited answer generation, memory reconciliation |
-| Tracing | [`src/tracing/`](src/tracing/) | Pydantic `Trace` model — the introspectable centerpiece |
+| Pipeline | [`src/pipeline.py`](src/pipeline.py) | Shared orchestration (recall → plan → tools → synthesis → write-back → Trace), driven by both demo + API |
+| Tracing | [`src/tracing/`](src/tracing/) | Pydantic `Trace` model + JSON persistence (`store.py`) + optional Langfuse emit (`observability.py`) |
 | LLM config | [`src/llm.py`](src/llm.py) | Provider-agnostic client (OpenAI / OpenRouter / Grok) |
-| API | [`src/api/`](src/api/) | FastAPI app (`/health`) |
+| API | [`src/api/`](src/api/) | FastAPI app — `POST /ask`, `GET /runs`, `GET /runs/{run_id}`, `/health` |
 
 ## Quickstart
 
@@ -150,6 +153,25 @@ the access mode; with the sentinel values it runs entirely on **mock seed data**
 so the demo is fully self-contained offline. Point `GITHUB_REPO` only at a repo
 you control. See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for the rationale.
 
+## HTTP API
+
+`make dev` (or `uvicorn src.api.main:app --reload`) serves the pipeline over HTTP:
+
+| Method & path | Purpose |
+|---|---|
+| `POST /ask` | Run the full pipeline for `{"question": "..."}` and return the complete `Trace` (plan, tool calls, evidence, memory, cited answer, timings). The run is also persisted and emitted to observability. |
+| `GET /runs` | List summaries of every persisted run, newest first. |
+| `GET /runs/{run_id}` | Fetch one run's full `Trace` JSON (`404` if unknown). |
+| `GET /health` | Liveness + current build phase. |
+
+Every run's `Trace` is persisted as JSON under `TRACE_DIR` (default `./traces`,
+gitignored), so a run is retrievable from this API independent of any third-party
+dashboard — that's the always-on half of observability. If `LANGFUSE_PUBLIC_KEY`
++ `LANGFUSE_SECRET_KEY` are set, each run is *also* emitted to a Langfuse
+dashboard (one trace with planner / tool / synthesis spans); with no keys that
+hook is a verified no-op, so the API and demo run identically offline.
+Interactive OpenAPI docs are served at `/docs` while the server is running.
+
 ## Repo layout
 
 ```
@@ -160,11 +182,12 @@ agentic-rag-project/
 │   ├── tools/       GitHub REST + mock tool wrappers
 │   ├── memory/      long-term (SQLite) + session memory + write-back
 │   ├── synthesis/   cited answer generation
-│   ├── tracing/     Trace pydantic models
-│   ├── api/         FastAPI app (/health)
+│   ├── tracing/     Trace models + JSON store + Langfuse emit
+│   ├── api/         FastAPI app (/ask · /runs · /health)
 │   ├── agent.py     LLM tool-calling loop
 │   ├── llm.py       provider-agnostic LLM client
-│   └── demo.py      end-to-end runner
+│   ├── pipeline.py  shared orchestration (demo + API)
+│   └── demo.py      end-to-end CLI runner
 ├── scripts/         seed helpers
 ├── tests/           pytest suite
 ├── .env.example     all env vars documented
@@ -182,7 +205,7 @@ Full detail (with "definition of done" per phase) in [`docs/ROADMAP.md`](docs/RO
 | 2 | LLM-driven planner + real tool-calling | ✅ Done |
 | 3 | Live GitHub data source | 🟡 REST tool layer built; live verification deferred (mock fallback works) |
 | 4 | Long-term + session memory, selective write-back, cross-session recall | ✅ Done |
-| 5 | Observability (LangSmith/Langfuse + persisted Trace JSON) | ⬜ Next |
+| 5 | Observability — persisted Trace JSON + HTTP API to retrieve runs; optional Langfuse hook | ✅ Done (JSON + API verified; Langfuse hook wired, add a key to light it) |
 | 6 | Minimal web UI (question → expandable trace) | ⬜ Planned |
 | 7 | Dockerize + deploy to DigitalOcean | ⬜ Planned |
 | 8 | Polish (architecture diagram, demo GIF, design-decisions writeup) | ⬜ Planned |

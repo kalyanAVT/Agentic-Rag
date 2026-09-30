@@ -1,30 +1,28 @@
 """
 Demo runner -- end-to-end agentic pipeline.
 
-Phase 2: LLM-driven planner + LLM tool-calling against seed data.
-Run with: python -m src.demo
-Or:       make demo
+Runs a few canned multi-hop questions through the shared pipeline
+(``src/pipeline``) and pretty-prints each Trace. The pipeline itself now also
+persists every Trace to TRACE_DIR (Phase 5), so after ``make demo`` the same
+runs are retrievable via the API's GET /runs.
+
+Run with: python -m src.demo    (or: make demo)
 """
 
 from __future__ import annotations
 
-import time
-import uuid
 import sys
 
 from dotenv import load_dotenv
 
-# Load .env BEFORE importing src modules so os.getenv("GITHUB_REPO") is available at import time
+# Load .env BEFORE importing src modules so os.getenv(...) is available at
+# import time (e.g. GITHUB_REPO read by the tool layer).
 load_dotenv()
 
-from src.agent import execute_plan_step
 from src.memory.seed import seed_prior_session
-from src.memory.session import SessionMemory
 from src.memory.store import MemoryStore
-from src.memory.writeback import extract_memories
-from src.planner.planner import generate_plan
-from src.synthesis.synthesizer import synthesize
-from src.tracing.models import MemoryEntry, Trace
+from src.pipeline import run_pipeline
+from src.tracing.models import Trace
 
 # -- Demo questions --------------------------------------------------------
 # Phase 2 requires two different questions producing different plans.
@@ -36,70 +34,6 @@ DEMO_QUESTIONS = [
     # (see src/memory/seed.py) and reconciles it against current evidence.
     "What did we decide about the dashboard pagination fix, and is it still on track?",
 ]
-
-
-def run_pipeline(question: str, store: MemoryStore | None = None) -> Trace:
-    """Execute the full agentic pipeline for a single question.
-
-    Phase 4 adds memory: relevant long-term facts are retrieved before
-    planning and fed into the planner + synthesis; durable new facts are
-    written back after synthesis. Both ends are recorded on the trace
-    (memory_used / memory_written).
-    """
-    run_id = str(uuid.uuid4())[:8]
-    t_start = time.perf_counter_ns()
-
-    # 0. Recall relevant long-term memory (empty if none relevant / no store)
-    memory_used: list[MemoryEntry] = store.retrieve(question) if store else []
-
-    # 1. LLM-driven plan (memory-aware)
-    t_plan = time.perf_counter_ns()
-    plan = generate_plan(question, memory_used)
-    timing = {"plan_ms": (time.perf_counter_ns() - t_plan) // 1_000_000}
-
-    # 2. Execute each plan step; SessionMemory holds working evidence (deduped)
-    session = SessionMemory()
-    all_tool_calls = []
-
-    t_tools = time.perf_counter_ns()
-    for step in plan:
-        session.record_step(step)
-        evidence, tool_calls = execute_plan_step(step, session.evidence)
-        session.add_evidence(evidence)
-        all_tool_calls.extend(tool_calls)
-    timing["tools_ms"] = (time.perf_counter_ns() - t_tools) // 1_000_000
-
-    evidence = session.evidence
-
-    # 3. Synthesize (memory-aware)
-    t_synth = time.perf_counter_ns()
-    answer, citations = synthesize(question, plan, evidence, memory_used)
-    timing["synthesis_ms"] = (time.perf_counter_ns() - t_synth) // 1_000_000
-
-    # 4. Write-back: persist any durable new facts (online only; no-op offline)
-    memory_written: list[MemoryEntry] = []
-    if store:
-        for entry in extract_memories(question, answer, evidence, run_id):
-            if store.add(entry):
-                memory_written.append(entry)
-
-    timing["total_ms"] = (time.perf_counter_ns() - t_start) // 1_000_000
-
-    # 5. Build trace
-    trace = Trace(
-        run_id=run_id,
-        question=question,
-        memory_used=memory_used,
-        plan=plan,
-        tool_calls=all_tool_calls,
-        evidence=evidence,
-        memory_written=memory_written,
-        answer=answer,
-        citations=citations,
-        timing_ms=timing,
-    )
-
-    return trace
 
 
 def print_trace(trace: Trace):

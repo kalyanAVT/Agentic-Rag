@@ -98,6 +98,7 @@ def test_should_persist_filters_candidates():
 
 
 def test_extract_memories_offline_is_noop(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "")  # neutralize real key from .env (higher precedence)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-change-me")
     assert extract_memories("q", "a", [], "run1") == []
 
@@ -120,7 +121,11 @@ def test_session_memory_dedups_evidence():
 def test_recall_pipeline_offline(tmp_path, monkeypatch):
     """The recall question retrieves a seeded prior-session fact and the
     fallback answer visibly uses it -- with no API key and mock tools."""
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-change-me")  # force offline everywhere
+    # force offline everywhere. LLM_API_KEY takes precedence over OPENAI_API_KEY
+    # (see src/llm.py get_api_key), and .env may hold a real one -- setting it to
+    # "" (not delenv) survives the load_dotenv(override=False) that runs on import.
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-change-me")
 
     import src.agent as agent_mod
     monkeypatch.setattr(agent_mod.github_tools, "TOOL_REGISTRY", {})  # force mock tools
