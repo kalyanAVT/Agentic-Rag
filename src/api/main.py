@@ -10,9 +10,14 @@ Phase 5 (observability) exposes the pipeline and its traces over HTTP:
 The GET endpoints read from the same on-disk TraceStore that every run writes to,
 so traces are retrievable from our own API independent of any third-party
 dashboard (Phase 5 definition of done). See docs/ARCHITECTURE.md sections 5-6.
+
+Phase 6 (frontend) mounts the static single-page trace viewer (``frontend/``) at
+``/`` on this same app, so the whole demo ships as one container.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -20,6 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.memory.store import MemoryStore
@@ -30,7 +36,7 @@ from src.tracing.store import TraceStore
 app = FastAPI(
     title="Agentic RAG",
     description="Multi-hop question answering over live GitHub data with memory and tracing.",
-    version="0.5.0",
+    version="0.6.0",
 )
 
 
@@ -43,7 +49,7 @@ class AskRequest(BaseModel):
 @app.get("/health")
 def health() -> dict:
     """Liveness check. Returns current build phase for quick sanity during dev."""
-    return {"status": "ok", "phase": 5}
+    return {"status": "ok", "phase": 6}
 
 
 @app.post("/ask", response_model=Trace)
@@ -75,3 +81,14 @@ def get_run(run_id: str) -> Trace:
     if trace is None:
         raise HTTPException(status_code=404, detail=f"No trace found for run_id {run_id!r}")
     return trace
+
+
+# --- Static frontend (Phase 6) --------------------------------------------
+# Mounted LAST, on purpose: Starlette matches routes in registration order, so
+# the JSON API routes above (plus FastAPI's own /docs and /openapi.json, added
+# at app construction) are matched first. This catch-all mount then serves the
+# single-page trace viewer for everything else, with html=True resolving "/" to
+# frontend/index.html. Guarded so the API still boots if the dir is missing.
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

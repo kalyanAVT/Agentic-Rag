@@ -36,10 +36,10 @@ def client(monkeypatch, tmp_path):
     return TestClient(app)
 
 
-def test_health_reports_phase_5(client):
+def test_health_reports_current_phase(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json()["phase"] == 5
+    assert resp.json()["phase"] == 6
 
 
 def test_ask_runs_pipeline_and_returns_trace(client):

@@ -79,12 +79,24 @@ met. Update the checkboxes as you go so future sessions know where things stand.
     `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` in `.env` to light it up; the
     hook is a verified no-op until then, so nothing breaks offline.
 
-## Phase 6 — Frontend
-- [ ] Minimal single-page UI: question input + expandable trace sections
+## Phase 6 — Frontend ✅
+- [x] Minimal single-page UI: question input + expandable trace sections
       (Plan / Tool Calls / Evidence / Memory Used / Answer with citations)
-- [ ] Citations link back to the source (e.g. the GitHub issue/PR/commit)
+      — a no-build static page (`frontend/index.html` + `app.js` + `styles.css`,
+      vanilla `fetch`) served by the FastAPI app itself: it POSTs to `/ask`,
+      renders the returned `Trace` answer-first, then the reasoning chain, and a
+      "recent runs" strip loads past traces via `GET /runs` + `/runs/{run_id}`.
+- [x] Citations link back to the source (e.g. the GitHub issue/PR/commit)
+      — `[E#]`/`[M#]` markers in the answer become links that open the enclosing
+      section, scroll to and flash the matching evidence/memory card; an evidence
+      card with a `url` links out to the GitHub issue/PR/commit.
 - **Definition of done:** a non-technical person can ask a question and
   visually follow the whole reasoning chain without reading logs.
+  - Served on the same app (`app.mount("/", StaticFiles(..., html=True))`,
+    mounted last so JSON routes + `/docs` win); `make dev` → open
+    <http://localhost:8000/>. Verified offline: page, `app.js`, `styles.css`
+    all serve, the JSON API is not shadowed, and stored traces render with
+    working citations (see `tests/test_frontend.py`).
 
 ## Phase 7 — Deployment
 - [ ] Dockerize API + frontend (see `docs/DEPLOYMENT.md`)

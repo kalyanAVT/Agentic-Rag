@@ -6,14 +6,14 @@ sub-questions, calls tools to gather evidence, reconciles that against long-term
 memory from prior sessions, and produces a **cited answer** — while emitting a
 full structured **trace** of every step: `plan → tool calls → evidence → memory → answer`.
 
-> **Status: working MVP (Phases 0–5).** The full pipeline runs end-to-end today
-> and every run is **traced** — persisted as JSON and served from an HTTP API
-> (`POST /ask`, `GET /runs`, `GET /runs/{run_id}`), with an optional Langfuse
-> dashboard hook. It is **provider-agnostic** (OpenAI / OpenRouter / xAI Grok)
-> and, with no API key, degrades gracefully to a deterministic **offline path**
-> so `make demo` always produces a complete trace. Live GitHub verification, the
-> web UI, and deployment are the remaining phases (see
-> [Roadmap status](#roadmap-status)).
+> **Status: working MVP (Phases 0–6).** The full pipeline runs end-to-end today,
+> every run is **traced** (persisted as JSON, served from an HTTP API, with an
+> optional Langfuse hook), and a **minimal web UI** renders each run's plan →
+> tool calls → evidence → memory → cited answer in the browser. It is
+> **provider-agnostic** (OpenAI / OpenRouter / xAI Grok) and, with no API key,
+> degrades gracefully to a deterministic **offline path** so `make demo` always
+> produces a complete trace. Live GitHub verification and deployment are the
+> remaining phases (see [Roadmap status](#roadmap-status)).
 
 ## What it does
 
@@ -74,6 +74,7 @@ provider can be swapped without a rewrite. See [`docs/ARCHITECTURE.md`](docs/ARC
 | Tracing | [`src/tracing/`](src/tracing/) | Pydantic `Trace` model + JSON persistence (`store.py`) + optional Langfuse emit (`observability.py`) |
 | LLM config | [`src/llm.py`](src/llm.py) | Provider-agnostic client (OpenAI / OpenRouter / Grok) |
 | API | [`src/api/`](src/api/) | FastAPI app — `POST /ask`, `GET /runs`, `GET /runs/{run_id}`, `/health` |
+| Frontend | [`frontend/`](frontend/) | No-build single-page trace viewer (HTML + vanilla JS), served by the API |
 
 ## Quickstart
 
@@ -172,6 +173,22 @@ dashboard (one trace with planner / tool / synthesis spans); with no keys that
 hook is a verified no-op, so the API and demo run identically offline.
 Interactive OpenAPI docs are served at `/docs` while the server is running.
 
+## Web UI
+
+`make dev`, then open **<http://localhost:8000/>**. Type a question (or click an
+example chip) and the page renders the run **answer-first**, followed by the
+reasoning chain as collapsible sections — Plan, Tool Calls, Evidence, Memory
+Used. Every `[E#]` / `[M#]` citation in the answer is a link: it opens the right
+section, scrolls to and flashes the matching evidence or memory card, and an
+evidence card with a source URL links out to the GitHub issue / PR / commit. A
+**Recent runs** strip lists past runs (`GET /runs`) and loads any of them in full
+(`GET /runs/{run_id}`).
+
+It's a single no-build static page (`frontend/index.html` + `app.js` +
+`styles.css`) that the FastAPI app serves itself, so the whole thing ships as one
+container. Like the rest of the system it works **offline** — with no LLM key the
+page still shows a complete plan → evidence → cited answer from the fallback path.
+
 ## Repo layout
 
 ```
@@ -188,6 +205,7 @@ agentic-rag-project/
 │   ├── llm.py       provider-agnostic LLM client
 │   ├── pipeline.py  shared orchestration (demo + API)
 │   └── demo.py      end-to-end CLI runner
+├── frontend/       no-build trace viewer (index.html · app.js · styles.css)
 ├── scripts/         seed helpers
 ├── tests/           pytest suite
 ├── .env.example     all env vars documented
@@ -206,8 +224,8 @@ Full detail (with "definition of done" per phase) in [`docs/ROADMAP.md`](docs/RO
 | 3 | Live GitHub data source | 🟡 REST tool layer built; live verification deferred (mock fallback works) |
 | 4 | Long-term + session memory, selective write-back, cross-session recall | ✅ Done |
 | 5 | Observability — persisted Trace JSON + HTTP API to retrieve runs; optional Langfuse hook | ✅ Done (JSON + API verified; Langfuse hook wired, add a key to light it) |
-| 6 | Minimal web UI (question → expandable trace) | ⬜ Planned |
-| 7 | Dockerize + deploy to DigitalOcean | ⬜ Planned |
+| 6 | Minimal web UI (question → expandable trace) | ✅ Done |
+| 7 | Dockerize + deploy to DigitalOcean | ⬜ Next |
 | 8 | Polish (architecture diagram, demo GIF, design-decisions writeup) | ⬜ Planned |
 
 ## Design decisions

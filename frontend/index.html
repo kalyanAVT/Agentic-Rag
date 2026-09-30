@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic RAG — trace viewer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Agentic RAG</h1>
+    <p class="tagline">
+      Ask a multi-hop question about the live GitHub project. Watch the agent
+      <strong>plan → call tools → gather evidence → recall memory → answer</strong>,
+      with every claim cited.
+    </p>
+  </header>
+
+  <main>
+    <!-- Ask box ---------------------------------------------------------- -->
+    <form id="ask-form" class="ask">
+      <label for="question" class="sr-only">Your question</label>
+      <textarea
+        id="question"
+        name="question"
+        rows="2"
+        placeholder="e.g. What did we decide about the dashboard pagination fix, and is it still on track?"
+        required
+      ></textarea>
+      <div class="ask-row">
+        <button id="ask-btn" type="submit">Ask</button>
+        <div class="examples" aria-label="Example questions">
+          <button type="button" class="example" data-q="What did we decide about the dashboard pagination fix, and is it still on track?">pagination fix</button>
+          <button type="button" class="example" data-q="What are the most recent merged pull requests, and what did they change?">recent PRs</button>
+          <button type="button" class="example" data-q="Summarize the open issues and identify the biggest risks this quarter.">open risks</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Status line ------------------------------------------------------ -->
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <!-- Recent runs ------------------------------------------------------ -->
+    <details id="recent" class="recent">
+      <summary>Recent runs <span id="recent-count" class="badge">0</span></summary>
+      <ul id="recent-list" class="recent-list"></ul>
+    </details>
+
+    <!-- Trace ------------------------------------------------------------ -->
+    <section id="trace" class="trace" hidden>
+      <div class="trace-head">
+        <h2 id="trace-question"></h2>
+        <span id="trace-meta" class="trace-meta"></span>
+      </div>
+
+      <!-- Sections are rendered by app.js in roadmap order:
+           Plan → Tool Calls → Evidence → Memory Used → Answer. -->
+      <div id="sections"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Offline-capable demo — runs with mock data and a deterministic
+    fallback when no LLM key is set.</span>
+    <a href="/docs" target="_blank" rel="noopener">API docs</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
