@@ -1,0 +1,53 @@
+# DigitalOcean App Platform spec -- one Dockerfile-built service that serves the
+# JSON API AND the static UI. Apply from the repo root with the DO CLI:
+#
+#   doctl apps create --spec infra/do-app.yaml --upsert     # create or update
+#
+# (or `make deploy`). The committed env values are the SAME offline-safe sentinels
+# as .env.example, so a fresh deploy comes up working on deterministic fallbacks.
+# Replace them with real, Encrypted values in the DO dashboard (or a private spec)
+# to enable live LLM / GitHub / Langfuse -- NEVER commit real secrets here.
+#
+# Spec reference: https://docs.digitalocean.com/products/app-platform/reference/app-spec/
+name: agentic-rag
+region: nyc
+services:
+  - name: api
+    dockerfile_path: infra/Dockerfile
+    source_dir: /
+    github:
+      repo: kalyanAVT/agentic-rag-project    # <-- set to your GitHub repo slug
+      branch: main
+      deploy_on_push: true
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    http_port: 8080                # App Platform injects PORT=8080; the container binds it
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 15
+      period_seconds: 20
+      timeout_seconds: 3
+    envs:
+      # --- Offline-safe sentinels (same as .env.example) -> app runs on fallbacks
+      - key: OPENAI_API_KEY
+        value: sk-change-me
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_TOKEN
+        value: ghp_change-me
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_REPO
+        value: your-username/demo-project-x
+        scope: RUN_TIME
+      - key: GITHUB_MCP_MODE
+        value: none
+        scope: RUN_TIME
+      # --- Optional live features: set real values (mark SECRET) in the dashboard:
+      #   LLM_API_KEY / LLM_BASE_URL / LLM_MODEL        (OpenRouter or xAI Grok)
+      #   LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST
+      #
+      # NOTE: App Platform's filesystem is EPHEMERAL -- long-term memory (SQLite)
+      # and persisted traces reset on every redeploy. Accepted demo limitation
+      # (docs/DEPLOYMENT.md, option 1); attach a volume or use Managed Postgres
+      # to persist them.

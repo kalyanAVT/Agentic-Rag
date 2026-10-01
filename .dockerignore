@@ -1,0 +1,34 @@
+# Docker build-context excludes -- keep the image slim and secrets out.
+#
+# Docker reads .dockerignore from the build-context ROOT (this repo root), even
+# though the Dockerfile lives in infra/. This is the portable location that both
+# `docker build` and DigitalOcean App Platform honor.
+
+# Virtualenv / Python caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Secrets and local env -- NEVER copy into the image
+.env
+
+# Runtime data (regenerated at runtime; also provided via a mounted volume)
+traces/
+*.db
+src/data/*.db
+
+# VCS / tooling / tests / docs -- not needed at runtime (frontend/ IS needed -- kept)
+.git/
+.gitignore
+.gitattributes
+.pytest_cache/
+tests/
+docs/
+.claude/
+
+# Build artifacts
+dist/
+build/

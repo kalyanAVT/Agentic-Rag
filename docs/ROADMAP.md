@@ -98,15 +98,26 @@ met. Update the checkboxes as you go so future sessions know where things stand.
     all serve, the JSON API is not shadowed, and stored traces render with
     working citations (see `tests/test_frontend.py`).
 
-## Phase 7 — Deployment
-- [ ] Dockerize API + frontend (see `docs/DEPLOYMENT.md`)
-- [ ] Deploy to DigitalOcean (App Platform or a droplet — see DEPLOYMENT.md
-      for the trade-off)
-- [ ] Secrets configured via DO's environment/secrets management, not baked
-      into the image
+## Phase 7 — Deployment 🟡
+- [x] Dockerize API + frontend (see `docs/DEPLOYMENT.md`) — one multi-stage,
+      non-root image (`infra/Dockerfile`) serving the API + static UI as a single
+      Uvicorn process; `infra/docker-compose.yml` for local prod-parity with a
+      named volume. `make docker-build` / `docker-run` / `compose-up`.
+- [x] Deploy to DigitalOcean (App Platform or a droplet — see DEPLOYMENT.md
+      for the trade-off) — App Platform spec written (`infra/do-app.yaml`),
+      one-command `make deploy` (`doctl apps create --spec … --upsert`).
+      **Live deploy handed off — needs the user's DO account** (`doctl auth init`
+      + GitHub repo connected). No Docker daemon / `doctl` on this machine.
+- [x] Secrets configured via DO's environment/secrets management, not baked
+      into the image — the committed spec carries only offline-safe sentinels
+      (`sk-change-me`, …); `.dockerignore` keeps `.env` out of the build context;
+      real keys get added Encrypted in the DO dashboard.
 - [ ] Confirm the 2–3 canned demo questions work against the deployed instance
+      — pending the live deploy above (user-owned hand-off).
 - **Definition of done:** a public URL exists, and the full demo works on it,
-  not just locally.
+  not just locally. — *Containerization + deploy config are complete and verified
+  statically (`tests/test_deploy_config.py`); the public-URL step is the
+  user-owned hand-off (DO account required).*
 
 ## Phase 8 — Polish for shortlisting
 - [ ] README with architecture diagram, live demo link, and a short GIF/video

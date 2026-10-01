@@ -53,8 +53,32 @@ seed-memory:
 	$(VENV_BIN)/python scripts/seed_memory.py
 
 # ---------------------------------------------------------------------------
-# deploy — build + push + deploy to DigitalOcean (Phase 7+)
+# Container image (Phase 7) — build from the repo root; Dockerfile is in infra/.
+# ---------------------------------------------------------------------------
+IMAGE ?= agentic-rag:latest
+
+.PHONY: docker-build
+docker-build:
+	docker build -f infra/Dockerfile -t $(IMAGE) .
+
+.PHONY: docker-run
+docker-run:
+	docker run --rm -p 8000:8000 $(IMAGE)
+
+.PHONY: compose-up
+compose-up:
+	docker compose -f infra/docker-compose.yml up --build
+
+.PHONY: compose-down
+compose-down:
+	docker compose -f infra/docker-compose.yml down
+
+# ---------------------------------------------------------------------------
+# deploy — (re)deploy to DigitalOcean App Platform from infra/do-app.yaml.
+# Requires doctl authenticated (`doctl auth init`) + GitHub connected to DO.
+# See docs/DEPLOYMENT.md. --upsert creates the app on first run, updates after.
 # ---------------------------------------------------------------------------
 .PHONY: deploy
 deploy:
-	@echo "deploy target not yet implemented; available from Phase 7 onward."
+	@command -v doctl >/dev/null 2>&1 || { echo "doctl not found — install it and run 'doctl auth init' first (see docs/DEPLOYMENT.md)"; exit 1; }
+	doctl apps create --spec infra/do-app.yaml --upsert

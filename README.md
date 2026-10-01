@@ -12,8 +12,10 @@ full structured **trace** of every step: `plan → tool calls → evidence → m
 > tool calls → evidence → memory → cited answer in the browser. It is
 > **provider-agnostic** (OpenAI / OpenRouter / xAI Grok) and, with no API key,
 > degrades gracefully to a deterministic **offline path** so `make demo` always
-> produces a complete trace. Live GitHub verification and deployment are the
-> remaining phases (see [Roadmap status](#roadmap-status)).
+> produces a complete trace. It is now **containerized** with a one-command
+> DigitalOcean deploy — lighting up a public URL just needs your DO account.
+> Live GitHub verification is the remaining integration step (see
+> [Roadmap status](#roadmap-status)).
 
 ## What it does
 
@@ -189,6 +191,44 @@ It's a single no-build static page (`frontend/index.html` + `app.js` +
 container. Like the rest of the system it works **offline** — with no LLM key the
 page still shows a complete plan → evidence → cited answer from the fallback path.
 
+## Deploy
+
+The whole system — JSON API **and** static UI — ships as **one container** (a
+single Uvicorn process), built from a multi-stage, non-root image
+([`infra/Dockerfile`](infra/Dockerfile)).
+
+```bash
+# Build the image (from the repo root; the Dockerfile lives in infra/)
+make docker-build
+
+# Run it offline with zero config → http://localhost:8000/ (deterministic fallbacks)
+make docker-run
+
+# Or run with local persistence (memory + traces on a named volume) via compose
+make compose-up          # docker compose -f infra/docker-compose.yml up --build
+```
+
+**DigitalOcean App Platform** is the target host. The spec lives in
+[`infra/do-app.yaml`](infra/do-app.yaml) and deploys with one command once the
+[`doctl`](https://docs.digitalocean.com/reference/doctl/) CLI is authenticated
+(`doctl auth init`) and your GitHub repo is connected:
+
+```bash
+make deploy              # doctl apps create --spec infra/do-app.yaml --upsert
+```
+
+The committed spec ships only **offline-safe sentinels** (`sk-change-me`, …), so a
+fresh deploy comes up green on the fallback path with **no real secrets in git**;
+`.dockerignore` keeps `.env` out of the build context entirely. Add real,
+Encrypted values (`LLM_API_KEY`, `GITHUB_TOKEN`, Langfuse keys) in the DO
+dashboard to light up live LLM / GitHub / observability. Full walkthrough and the
+App-Platform-vs-droplet trade-off in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+> **Known limitation.** App Platform's filesystem is ephemeral, so long-term
+> memory (SQLite) and persisted traces reset on every redeploy — an accepted
+> demo trade-off. `make compose-up` persists them on a named volume locally;
+> attaching a DO volume or Managed Postgres would persist them in production.
+
 ## Repo layout
 
 ```
@@ -206,10 +246,12 @@ agentic-rag-project/
 │   ├── pipeline.py  shared orchestration (demo + API)
 │   └── demo.py      end-to-end CLI runner
 ├── frontend/       no-build trace viewer (index.html · app.js · styles.css)
+├── infra/          Dockerfile · docker-compose · DigitalOcean app spec
 ├── scripts/         seed helpers
 ├── tests/           pytest suite
+├── .dockerignore    keeps .env + build bloat out of the image
 ├── .env.example     all env vars documented
-└── Makefile         setup · dev · demo · test · seed-memory
+└── Makefile         setup · dev · demo · test · docker · deploy
 ```
 
 ## Roadmap status
@@ -225,7 +267,7 @@ Full detail (with "definition of done" per phase) in [`docs/ROADMAP.md`](docs/RO
 | 4 | Long-term + session memory, selective write-back, cross-session recall | ✅ Done |
 | 5 | Observability — persisted Trace JSON + HTTP API to retrieve runs; optional Langfuse hook | ✅ Done (JSON + API verified; Langfuse hook wired, add a key to light it) |
 | 6 | Minimal web UI (question → expandable trace) | ✅ Done |
-| 7 | Dockerize + deploy to DigitalOcean | ⬜ Next |
+| 7 | Dockerize + deploy to DigitalOcean | 🟡 Containerized; one-command DO deploy (`make deploy`) — live public URL handed off (needs DO account) |
 | 8 | Polish (architecture diagram, demo GIF, design-decisions writeup) | ⬜ Planned |
 
 ## Design decisions

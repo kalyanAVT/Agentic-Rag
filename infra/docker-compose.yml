@@ -1,0 +1,32 @@
+# Local dev / prod-parity: builds the SAME image App Platform runs and serves the
+# JSON API + static frontend at http://localhost:8000. Memory + traces live in a
+# named volume so they survive restarts (unlike App Platform's ephemeral FS).
+#
+#   docker compose -f infra/docker-compose.yml up --build      # start
+#   docker compose -f infra/docker-compose.yml down            # stop
+#
+# The app runs fully offline with no .env at all (deterministic fallbacks); add a
+# real ../.env for live LLM / GitHub / Langfuse. `env_file: required: false`
+# needs Docker Compose v2.24+ (bundled with recent Docker Desktop / Engine).
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    image: agentic-rag:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # Persist runtime data on the mounted volume (overrides the image defaults).
+      MEMORY_DB_PATH: /data/memory.db
+      TRACE_DIR: /data/traces
+      PORT: "8000"
+    volumes:
+      - agentic-data:/data
+    restart: unless-stopped
+
+volumes:
+  agentic-data:
