@@ -6,7 +6,7 @@ sub-questions, calls tools to gather evidence, reconciles that against long-term
 memory from prior sessions, and produces a **cited answer** — while emitting a
 full structured **trace** of every step: `plan → tool calls → evidence → memory → answer`.
 
-> **Status: working MVP (Phases 0–6).** The full pipeline runs end-to-end today,
+> **Status: working MVP (Phases 0–8).** The full pipeline runs end-to-end today,
 > every run is **traced** (persisted as JSON, served from an HTTP API, with an
 > optional Langfuse hook), and a **minimal web UI** renders each run's plan →
 > tool calls → evidence → memory → cited answer in the browser. It is
@@ -16,6 +16,27 @@ full structured **trace** of every step: `plan → tool calls → evidence → m
 > DigitalOcean deploy — lighting up a public URL just needs your DO account.
 > Live GitHub verification is the remaining integration step (see
 > [Roadmap status](#roadmap-status)).
+
+## Live demo
+
+<!--
+  HAND-OFF (Phase 8): once the DigitalOcean deploy is live, paste the public URL and
+  a short screen-capture GIF here, e.g.
+
+    **▶ Live:** https://agentic-rag-xxxxx.ondigitalocean.app
+    ![Demo — plan → tool calls → evidence → cited answer](docs/assets/demo.gif)
+
+  docs/assets/README.md says exactly what to capture. The one-command deploy
+  (`make deploy`) is ready; it only needs a DigitalOcean account (see ## Deploy).
+-->
+
+> **Live URL & demo GIF — pending the deploy.** The system is fully runnable **right
+> now, locally**: `make demo` prints a complete trace for three multi-hop questions
+> (including cross-session memory recall), and `make dev` → <http://localhost:8000/>
+> serves the web UI, where you can watch the **plan → tool calls → evidence → cited
+> answer** unfold for any question. The public URL and a short GIF drop in here once
+> the one-command DigitalOcean deploy (see [Deploy](#deploy)) is run — it only needs
+> a DO account.
 
 ## What it does
 
@@ -33,6 +54,43 @@ and the agent will:
 6. **Trace** the whole run as an introspectable object (plan, tool-call args/results, evidence, memory read/written, citations, timings).
 
 ## Architecture
+
+```mermaid
+flowchart TD
+    Q(["User question"]) --> R
+
+    subgraph PIPE["run_pipeline · src/pipeline.py"]
+        direction TB
+        R["1 · Recall<br/>relevant long-term facts"]
+        P["2 · Plan<br/>LLM structured output → 2–5 sub-questions"]
+        A["3 · Act<br/>LLM tool-calling loop, per sub-question"]
+        S["4 · Synthesize<br/>cited answer, reconcile recalled memory"]
+        W["5 · Write-back<br/>0–3 atomic, durable new facts"]
+        R --> P --> A --> S --> W
+    end
+
+    A -->|call_tool| GH["GitHub REST API<br/>live"]
+    A -->|call_tool| MK["Mock seed data<br/>offline fallback"]
+    GH -.evidence.-> A
+    MK -.evidence.-> A
+
+    MEM[("Long-term memory<br/>SQLite · keyword/tag overlap")]
+    MEM -.recall.-> R
+    W -.persist.-> MEM
+
+    W --> T["Structured Trace<br/>plan · tool calls · evidence · memory · citations · timing"]
+    T --> UI["Web UI · REST API (/ask · /runs)"]
+    T --> J[("Trace JSON<br/>traces/*.json")]
+    T --> L[/"Langfuse<br/>optional · env-gated"/]
+
+    classDef llm fill:#e8ecff,stroke:#6678c9,color:#111;
+    classDef store fill:#eafbea,stroke:#4a9a4a,color:#111;
+    class P,A,S llm;
+    class MEM,J store;
+```
+
+<details>
+<summary>Plain-text version (for terminals / editors that don't render Mermaid)</summary>
 
 ```
                         ┌──────────────┐
@@ -61,6 +119,8 @@ and the agent will:
                      structured Trace object
               (plan · tool calls · evidence · memory · citations · timing)
 ```
+
+</details>
 
 Each stage is a separate module with a clear interface, so the data source or LLM
 provider can be swapped without a rewrite. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -268,21 +328,71 @@ Full detail (with "definition of done" per phase) in [`docs/ROADMAP.md`](docs/RO
 | 5 | Observability — persisted Trace JSON + HTTP API to retrieve runs; optional Langfuse hook | ✅ Done (JSON + API verified; Langfuse hook wired, add a key to light it) |
 | 6 | Minimal web UI (question → expandable trace) | ✅ Done |
 | 7 | Dockerize + deploy to DigitalOcean | 🟡 Containerized; one-command DO deploy (`make deploy`) — live public URL handed off (needs DO account) |
-| 8 | Polish (architecture diagram, demo GIF, design-decisions writeup) | ⬜ Planned |
+| 8 | Polish — architecture diagram, design-decisions writeup, demo-data cleanup | 🟡 Diagram + writeup + clean demo data done; live URL & GIF are hand-offs (need the deploy) |
 
 ## Design decisions
 
-- **Linear plan, not a DAG.** Each sub-question is independently answerable, which
-  keeps the trace legible and the executor simple. A DAG would buy parallelism at
-  the cost of demo clarity — noted as a future scaling change.
-- **Selective memory, not "store everything".** Write-back extracts 0–3 *atomic,
-  durable* facts per exchange ("would this still be useful in two weeks?") and
-  dedups before insert — transcripts are never stored.
-- **Always a working demo path.** Every LLM call site has a deterministic offline
-  fallback, so the system is demoable with zero credentials and never left in a
-  broken state.
-- **SQLite for memory** (durable, zero-infra); the interface leaves room to swap
-  in Postgres + pgvector to scale.
+The three questions a reviewer tends to ask — *why this memory design, why a linear
+planner, and what would you change to scale it* — answered directly.
+
+### Why this memory design (selective, not "store everything")
+
+Memory is a **write-back policy**, not a log. After each run, synthesis proposes
+**0–3 atomic, durable facts** — each gated by "would this still be useful to recall
+in two weeks?" — and they're inserted only if they survive a **Jaccard token-overlap
+dedup** (≥ 0.6) against what's already stored. Transcripts and raw tool output are
+never persisted. Retrieval into the planner uses the same lightweight **keyword /
+topic-tag overlap** (tags weighted double), returns only entries with non-zero
+overlap, and is capped at the top-k — the planner sees what's *relevant*, not the
+whole store. A hard `MAX_ENTRIES` cap evicts oldest-first so the store can't grow
+without bound ([`src/memory/store.py`](src/memory/store.py)).
+
+The point being demonstrated is the **policy** — what's worth remembering and how
+recalled facts get reconciled and cited against fresh evidence — so it runs
+identically online and offline with **zero infrastructure and no embeddings**. The
+trade-off is explicit: keyword overlap misses paraphrases a vector search would
+catch. The store's interface is deliberately narrow (`add` / `retrieve` / `all`) so
+swapping in Postgres + pgvector is a drop-in, not a rewrite.
+
+### Why the planner is linear, not a DAG
+
+Each sub-question in a plan is **independently answerable**, so the executor is a
+simple ordered loop. That's a deliberate choice for this system's actual goal — an
+**introspectable trace**: a flat `plan → tool calls → evidence → answer` sequence is
+something a non-technical reviewer can read top-to-bottom, which is the centerpiece
+of the demo. A DAG would buy parallel fan-out and *dependent* sub-questions (step 3
+consumes step 2's output), but it costs scheduling, partial-failure handling, and —
+most relevant here — trace legibility. It's the **first thing I'd change** once
+questions genuinely need one sub-answer to shape the next; the planner already emits
+a structured plan object, so the executor could grow dependency edges without
+touching the planner's interface.
+
+### Always a working demo path
+
+Every LLM call site (planner, agent, synthesis) is wrapped so that an empty,
+malformed, slow, or errored completion **degrades to a deterministic fallback**
+instead of crashing — backed by a bounded per-request timeout and
+[`tests/test_resilience.py`](tests/test_resilience.py). This is visible in the live
+demo: when the free model router returns junk for the structured-output planner call,
+the run quietly falls back to the keyword heuristic and still produces a complete,
+cited trace. The system is demoable with zero credentials and is never left in a
+broken state.
+
+### What I'd change to scale this to production
+
+- **Memory:** SQLite → **Postgres + pgvector** for semantic retrieval and concurrent
+  writers; add recency decay and per-fact provenance so recalled facts are auditable.
+- **Planner:** linear → **DAG** with parallel independent branches and a *replan*
+  step when a tool returns nothing (currently the step just yields no evidence).
+- **Tool layer:** widen the GitHub surface, add response **caching + rate-limit
+  backoff**, and move to a generic MCP client so a new data source is config, not code.
+- **Persistence:** App Platform's filesystem is ephemeral, so memory + traces reset
+  on redeploy — attach a **DO volume or Managed Postgres** to persist them in prod.
+- **Observability → evaluation:** the Langfuse hook is wired; the next step is a
+  **golden-question eval harness** in CI that regresses answer quality and citation
+  coverage, so changes to the planner/prompt can't silently degrade output.
+- **Cost / latency:** cache planner + tool results and split models — a small, cheap
+  model for planning and tool selection, a stronger one reserved for synthesis.
 
 ## License
 

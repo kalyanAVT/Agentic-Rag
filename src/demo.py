@@ -29,7 +29,9 @@ from src.tracing.models import Trace
 
 DEMO_QUESTIONS = [
     "What are the most recent merged pull requests in this repository?",
-    "Are there any open issues regarding reinforcement learning algorithms?",
+    # Multi-hop: combines a blockers search (issues) with the PRs that address
+    # them -- exercises 2+ tools and cross-references issue #3 <-> PR #103.
+    "Which open issues are blocking the Q3 release, and are there any pull requests addressing them?",
     # Cross-session recall: retrieves a fact seeded by a "prior session"
     # (see src/memory/seed.py) and reconciles it against current evidence.
     "What did we decide about the dashboard pagination fix, and is it still on track?",

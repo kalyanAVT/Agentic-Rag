@@ -119,11 +119,26 @@ met. Update the checkboxes as you go so future sessions know where things stand.
   statically (`tests/test_deploy_config.py`); the public-URL step is the
   user-owned hand-off (DO account required).*
 
-## Phase 8 — Polish for shortlisting
-- [ ] README with architecture diagram, live demo link, and a short GIF/video
-- [ ] A written "design decisions" section addressing: why this memory
+## Phase 8 — Polish for shortlisting 🟡
+- [x] README with architecture diagram — a **Mermaid** flowchart (renders natively
+      on GitHub) of the recall → plan → act → synthesize → write-back pipeline, with
+      the live/offline tool split and trace fan-out; a plain-text ASCII version is
+      kept collapsed as a fallback. *Live demo link + short GIF are hand-offs* (a
+      ready-to-paste `## Live demo` block + `docs/assets/README.md` capture checklist
+      are in place; both need the public deploy, which is the Phase 7 hand-off).
+- [x] A written "design decisions" section addressing: why this memory
       design, why this planner is linear (not a DAG), what you'd change to
-      scale this to production
-- [ ] Clean up seed/demo data so the live instance doesn't look empty or fake
+      scale this to production — expanded into four subsections in the README.
+- [x] Clean up seed/demo data so the live instance doesn't look empty or fake —
+      replaced the incoherent "reinforcement learning algorithms" demo question
+      (no match in a data-pipeline/dashboard repo → empty answer) with a
+      data-grounded multi-hop question ("Which open issues are blocking the Q3
+      release, and are there any PRs addressing them?"), verified end-to-end; and
+      reset the local long-term-memory DB so no stale write-back fossils linger
+      (it's gitignored and re-seeds from `src/memory/seed.py`).
 - **Definition of done:** you could hand the README + live link to a recruiter
-  with zero further explanation needed.
+  with zero further explanation needed. — *Diagram, design-decisions writeup, and
+  demo-data cleanup are complete. The only outstanding items are the live public
+  URL and a screen-capture GIF, both of which depend on the Phase 7 deploy
+  hand-off (user's DO account); the README has ready-to-fill placeholders for both.*
+
