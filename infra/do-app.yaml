@@ -16,7 +16,7 @@ services:
     dockerfile_path: infra/Dockerfile
     source_dir: /
     github:
-      repo: kalyanAVT/agentic-rag-project    # <-- set to your GitHub repo slug
+      repo: kalyanAVT/Agentic-Rag            # the GitHub repo this code lives in
       branch: main
       deploy_on_push: true
     instance_size_slug: basic-xxs
@@ -38,7 +38,7 @@ services:
         scope: RUN_TIME
         type: SECRET
       - key: GITHUB_REPO
-        value: your-username/demo-project-x
+        value: kalyanAVT/demo-project-x
         scope: RUN_TIME
       - key: GITHUB_MCP_MODE
         value: none
