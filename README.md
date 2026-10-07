@@ -12,31 +12,33 @@ full structured **trace** of every step: `plan → tool calls → evidence → m
 > tool calls → evidence → memory → cited answer in the browser. It is
 > **provider-agnostic** (OpenAI / OpenRouter / xAI Grok) and, with no API key,
 > degrades gracefully to a deterministic **offline path** so `make demo` always
-> produces a complete trace. It is now **containerized** with a one-command
-> DigitalOcean deploy — lighting up a public URL just needs your DO account.
+> produces a complete trace. It's **live** at
+> [agentic-rag-2dk7.onrender.com](https://agentic-rag-2dk7.onrender.com) (free
+> Render tier) and ships as one container with a one-command DigitalOcean deploy.
 > Live GitHub verification is the remaining integration step (see
 > [Roadmap status](#roadmap-status)).
 
 ## Live demo
 
 <!--
-  HAND-OFF (Phase 8): once the DigitalOcean deploy is live, paste the public URL and
-  a short screen-capture GIF here, e.g.
+  Phase 8: the free Render deploy is LIVE below. Add a short screen-capture GIF here
+  once captured — docs/assets/README.md has the exact capture checklist.
 
-    **▶ Live:** https://agentic-rag-xxxxx.ondigitalocean.app
     ![Demo — plan → tool calls → evidence → cited answer](docs/assets/demo.gif)
-
-  docs/assets/README.md says exactly what to capture. The one-command deploy
-  (`make deploy`) is ready; it only needs a DigitalOcean account (see ## Deploy).
 -->
 
-> **Live URL & demo GIF — pending the deploy.** The system is fully runnable **right
-> now, locally**: `make demo` prints a complete trace for three multi-hop questions
-> (including cross-session memory recall), and `make dev` → <http://localhost:8000/>
-> serves the web UI, where you can watch the **plan → tool calls → evidence → cited
-> answer** unfold for any question. The public URL and a short GIF drop in here once
-> the one-command DigitalOcean deploy (see [Deploy](#deploy)) is run — it only needs
-> a DO account.
+### ▶ Live: [agentic-rag-2dk7.onrender.com](https://agentic-rag-2dk7.onrender.com)
+
+Ask a question on the page and the run renders **answer-first**, followed by the
+collapsible reasoning chain — **Plan → Tool Calls → Evidence → Memory Used** — with
+every `[E#]` / `[M#]` citation clickable through to the matching evidence or memory
+card. Same system as `make demo` locally; no install required.
+
+> **Free-tier note.** The Render free web service **spins down when idle**, so the
+> first request after a quiet spell cold-starts in ~30–60 s. It also has an
+> **ephemeral filesystem** — long-term memory and persisted traces reset on
+> redeploy/cold-start (the accepted demo trade-off noted under [Deploy](#deploy)).
+> For no cold start and real-LLM answers, run `make demo` / `make dev` locally.
 
 ## What it does
 
@@ -350,8 +352,8 @@ Full detail (with "definition of done" per phase) in [`docs/ROADMAP.md`](docs/RO
 | 4 | Long-term + session memory, selective write-back, cross-session recall | ✅ Done |
 | 5 | Observability — persisted Trace JSON + HTTP API to retrieve runs; optional Langfuse hook | ✅ Done (JSON + API verified; Langfuse hook wired, add a key to light it) |
 | 6 | Minimal web UI (question → expandable trace) | ✅ Done |
-| 7 | Dockerize + deploy to DigitalOcean | 🟡 Containerized; one-command DO deploy (`make deploy`) — live public URL handed off (needs DO account) |
-| 8 | Polish — architecture diagram, design-decisions writeup, demo-data cleanup | 🟡 Diagram + writeup + clean demo data done; live URL & GIF are hand-offs (need the deploy) |
+| 7 | Dockerize + deploy to DigitalOcean | 🟡 Containerized; one-command DO deploy (`make deploy`). Public URL achieved on a free Render tier — see [Live demo](#live-demo) |
+| 8 | Polish — architecture diagram, design-decisions writeup, demo-data cleanup | 🟡 Diagram + writeup + clean demo data + **live URL** done; demo GIF is the last hand-off |
 
 ## Design decisions
 

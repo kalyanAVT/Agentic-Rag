@@ -33,10 +33,14 @@ from src.pipeline import run_pipeline
 from src.tracing.models import Trace
 from src.tracing.store import TraceStore
 
+# Current build phase, surfaced by GET /health. One constant so the phase is
+# bumped in a single place (tests assert against it, not a magic number).
+CURRENT_PHASE = 8
+
 app = FastAPI(
     title="Agentic RAG",
     description="Multi-hop question answering over live GitHub data with memory and tracing.",
-    version="0.6.0",
+    version="0.8.0",
 )
 
 
@@ -49,7 +53,7 @@ class AskRequest(BaseModel):
 @app.get("/health")
 def health() -> dict:
     """Liveness check. Returns current build phase for quick sanity during dev."""
-    return {"status": "ok", "phase": 6}
+    return {"status": "ok", "phase": CURRENT_PHASE}
 
 
 @app.post("/ask", response_model=Trace)

@@ -37,9 +37,11 @@ def client(monkeypatch, tmp_path):
 
 
 def test_health_reports_current_phase(client):
+    from src.api.main import CURRENT_PHASE
+
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json()["phase"] == 6
+    assert resp.json()["phase"] == CURRENT_PHASE
 
 
 def test_ask_runs_pipeline_and_returns_trace(client):

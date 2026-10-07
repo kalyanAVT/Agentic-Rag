@@ -53,9 +53,11 @@ def test_static_assets_resolve(client):
 
 def test_static_mount_does_not_shadow_json_api(client):
     # The catch-all "/" mount must be matched AFTER the JSON routes.
+    from src.api.main import CURRENT_PHASE
+
     health = client.get("/health")
     assert health.status_code == 200
-    assert health.json()["phase"] == 6
+    assert health.json()["phase"] == CURRENT_PHASE
 
     runs = client.get("/runs")
     assert runs.status_code == 200
