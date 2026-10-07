@@ -289,6 +289,28 @@ App-Platform-vs-droplet trade-off in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 > demo trade-off. `make compose-up` persists them on a named volume locally;
 > attaching a DO volume or Managed Postgres would persist them in production.
 
+### Free tier: Render
+
+Prefer a free public URL? The **same container** deploys to [Render](https://render.com)
+from a committed Blueprint ([`render.yaml`](render.yaml)) — no CLI, no cost:
+
+> Render dashboard → **New → Blueprint** → connect this repo → it reads `render.yaml`.
+
+It builds `infra/Dockerfile`, binds Render's injected `$PORT`, health-checks `/health`,
+and ships the same **offline-safe sentinels**, so a fresh deploy comes up green on the
+fallback path with no real secrets in git. Add real values (`LLM_API_KEY`, …) as
+**secrets** in the Render dashboard to light up live LLM / observability.
+
+> **Free-tier caveats.** The service **spins down when idle** (first request after a
+> cold start takes ~a minute) and the filesystem is **ephemeral** (memory + traces
+> reset on redeploy / cold start) — same accepted demo trade-off as App Platform.
+> A Render Disk at `/data` (paid) or Managed Postgres persists them.
+
+> **Why not Vercel / serverless?** This is a long-running ASGI web service with
+> on-disk SQLite memory and multi-second LLM calls — it needs a persistent process,
+> not short-lived serverless functions, so Render / App Platform / Fly.io / a droplet
+> are the right fits, not Vercel's function runtime.
+
 ## Repo layout
 
 ```
@@ -307,6 +329,7 @@ agentic-rag-project/
 │   └── demo.py      end-to-end CLI runner
 ├── frontend/       no-build trace viewer (index.html · app.js · styles.css)
 ├── infra/          Dockerfile · docker-compose · DigitalOcean app spec
+├── render.yaml      Render Blueprint (free-tier deploy, same container)
 ├── scripts/         seed helpers
 ├── tests/           pytest suite
 ├── .dockerignore    keeps .env + build bloat out of the image

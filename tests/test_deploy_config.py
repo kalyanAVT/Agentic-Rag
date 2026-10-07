@@ -65,3 +65,17 @@ def test_do_app_spec_is_valid_and_offline_safe():
     assert envs["OPENAI_API_KEY"]["value"] == "sk-change-me"
     assert envs["OPENAI_API_KEY"]["type"] == "SECRET"
     assert envs["GITHUB_MCP_MODE"]["value"] == "none"
+
+
+def test_render_blueprint_is_valid_and_offline_safe():
+    spec = yaml.safe_load((ROOT / "render.yaml").read_text(encoding="utf-8"))
+    (service,) = spec["services"]              # exactly one service
+    assert service["type"] == "web"
+    assert service["runtime"] == "docker"
+    assert service["dockerfilePath"] == "./infra/Dockerfile"
+    assert service["dockerContext"] == "."     # build from repo root
+    assert service["healthCheckPath"] == "/health"
+    envs = {e["key"]: e["value"] for e in service["envVars"]}
+    # A fresh deploy must run OFFLINE (placeholder key) -> deterministic fallbacks.
+    assert envs["OPENAI_API_KEY"] == "sk-change-me"
+    assert envs["GITHUB_MCP_MODE"] == "none"

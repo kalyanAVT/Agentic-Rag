@@ -1,0 +1,45 @@
+# Render Blueprint -- one Dockerfile-built web service serving the JSON API AND the
+# static UI (the SAME container as the DigitalOcean spec in infra/do-app.yaml).
+#
+# Deploy (one-time, from the repo root):
+#   Render dashboard -> New -> Blueprint -> connect this GitHub repo -> it reads
+#   this file. Free web-service tier, no CLI required.
+#
+# The committed env values are the SAME offline-safe sentinels as .env.example, so a
+# fresh deploy comes up green on the deterministic fallback path with NO real secrets
+# in git. Add real values (LLM_API_KEY, GITHUB_TOKEN, Langfuse keys) as secrets in the
+# Render dashboard to light up live LLM / GitHub / observability -- never commit them.
+#
+# Blueprint reference: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: agentic-rag
+    runtime: docker
+    repo: https://github.com/kalyanAVT/Agentic-Rag
+    branch: main
+    plan: free                      # free web service (spins down when idle)
+    region: oregon
+    dockerfilePath: ./infra/Dockerfile
+    dockerContext: .                # build from the repo root; Dockerfile is in infra/
+    healthCheckPath: /health
+    autoDeploy: true                # redeploy on push to main
+    envVars:
+      # --- Offline-safe sentinels (same as .env.example) -> app runs on fallbacks
+      - key: OPENAI_API_KEY
+        value: sk-change-me
+      - key: GITHUB_TOKEN
+        value: ghp_change-me
+      - key: GITHUB_REPO
+        value: kalyanAVT/demo-project-x
+      - key: GITHUB_MCP_MODE
+        value: none
+      # --- Optional live features: set real values as SECRETS in the Render dashboard
+      #   LLM_API_KEY / LLM_BASE_URL / LLM_MODEL        (OpenRouter or xAI Grok)
+      #   LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST
+      #
+      # Render injects $PORT; the container binds it (Dockerfile CMD uses ${PORT:-8000}).
+      #
+      # NOTE: Render's FREE tier has an ephemeral filesystem (no persistent disk) and
+      # spins the service down when idle -- so long-term memory (SQLite) and persisted
+      # traces reset on redeploy / cold start. Accepted demo limitation (mirrors App
+      # Platform); mount a Render Disk at /data (paid) or use Managed Postgres to persist.
