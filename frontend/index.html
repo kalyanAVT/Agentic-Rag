@@ -10,7 +10,8 @@
   <header class="site-header">
     <h1>Agentic RAG</h1>
     <p class="tagline">
-      Ask a multi-hop question about the live GitHub project. Watch the agent
+      Ask a multi-hop question about <strong>any GitHub repo</strong> (or the built-in
+      offline demo). Watch the agent
       <strong>plan → call tools → gather evidence → recall memory → answer</strong>,
       with every claim cited.
     </p>
@@ -19,6 +20,25 @@
   <main>
     <!-- Ask box ---------------------------------------------------------- -->
     <form id="ask-form" class="ask">
+      <div class="repo-row">
+        <label for="repo" class="sr-only">GitHub repository</label>
+        <input
+          id="repo"
+          name="repo"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="GitHub repo — e.g. fastapi/fastapi or https://github.com/psf/requests"
+        />
+        <label for="token" class="sr-only">GitHub token (optional, for private repos)</label>
+        <input
+          id="token"
+          name="token"
+          type="password"
+          autocomplete="off"
+          placeholder="Token (only for private repos)"
+        />
+      </div>
       <label for="question" class="sr-only">Your question</label>
       <textarea
         id="question"

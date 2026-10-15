@@ -15,3 +15,6 @@ src/data/memory.db
 
 # Persisted run traces (Phase 5 observability; regenerated on every run)
 traces/
+
+# Personal file kept in the working dir, not part of the project
+Resume-template.tex

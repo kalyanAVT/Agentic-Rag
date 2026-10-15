@@ -26,10 +26,11 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from src.memory.store import MemoryStore
 from src.pipeline import run_pipeline
+from src.tools.repo import RepoAccessError
 from src.tracing.models import Trace
 from src.tracing.store import TraceStore
 
@@ -48,6 +49,20 @@ class AskRequest(BaseModel):
     """Body for POST /ask."""
 
     question: str = Field(..., min_length=1, description="The multi-hop question to answer.")
+    repo: str | None = Field(
+        default=None,
+        description=(
+            "Optional GitHub repo to answer against live (URL or 'owner/name'). "
+            "Omit to use the offline seed demo."
+        ),
+    )
+    token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Optional GitHub token for a private repo. Used only to build the "
+            "GitHub client for this request -- never stored, logged, or returned."
+        ),
+    )
 
 
 @app.get("/health")
@@ -61,13 +76,25 @@ def ask(req: AskRequest) -> Trace:
     """Run the agentic pipeline for one question and return the full Trace.
 
     A fresh MemoryStore is opened per request (SQLite; retrieval feeds the
-    planner/synthesis, durable facts are written back). The pipeline persists the
-    Trace to the TraceStore and emits it to observability as a side effect, so the
-    returned run is immediately retrievable via GET /runs/{run_id}.
+    planner/synthesis, durable facts are written back). With a ``repo`` the run
+    is scoped to live GitHub data for that repo (optionally private, via
+    ``token``); without one it uses the offline seed data. The pipeline persists
+    the Trace and emits it to observability as a side effect, so the returned run
+    is immediately retrievable via GET /runs/{run_id}.
+
+    SECURITY: ``token`` is unwrapped only to build the GitHub client inside the
+    run; it is absent from the request log, the Trace, and every response model.
     """
     store = MemoryStore()
+    token = req.token.get_secret_value() if req.token else None
     try:
-        return run_pipeline(req.question, store)
+        return run_pipeline(req.question, store, repo=req.repo, token=token)
+    except ValueError as exc:
+        # Malformed repo reference -> the client's fault.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RepoAccessError as exc:
+        # Repo missing, private without a valid token, or rate-limited.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         store.close()
 

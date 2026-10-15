@@ -216,18 +216,34 @@ function renderTrace(trace) {
 
 // --- data calls ------------------------------------------------------------
 
-async function ask(question) {
+// FastAPI returns errors as {"detail": "..."} (e.g. a bad repo URL -> 422, an
+// unreadable/private repo -> 400); fall back to raw text otherwise.
+async function errorDetail(resp) {
+  const raw = await resp.text();
+  try {
+    const j = JSON.parse(raw);
+    if (j && typeof j.detail === "string") return j.detail;
+  } catch (_) {}
+  return raw.slice(0, 300);
+}
+
+async function ask(question, repo, token) {
   setStatus("Thinking — planning, calling tools, synthesizing…", "busy");
   $("ask-btn").disabled = true;
   try {
+    // repo/token are optional: omit them so the server takes the offline
+    // seed-demo path when no repo is given. The token authenticates only this
+    // one request and is never echoed back in the Trace.
+    const payload = { question };
+    if (repo) payload.repo = repo;
+    if (token) payload.token = token;
     const resp = await fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(payload),
     });
     if (!resp.ok) {
-      const detail = await resp.text();
-      throw new Error(`HTTP ${resp.status}: ${detail.slice(0, 300)}`);
+      throw new Error(`${resp.status}: ${await errorDetail(resp)}`);
     }
     const trace = await resp.json();
     renderTrace(trace);
@@ -284,13 +300,13 @@ async function loadRun(runId) {
 $("ask-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const q = $("question").value.trim();
-  if (q) ask(q);
+  if (q) ask(q, $("repo").value.trim(), $("token").value.trim());
 });
 
 document.querySelectorAll(".example").forEach((btn) =>
   btn.addEventListener("click", () => {
     $("question").value = btn.dataset.q;
-    ask(btn.dataset.q);
+    ask(btn.dataset.q, $("repo").value.trim(), $("token").value.trim());
   })
 );
 

@@ -70,6 +70,7 @@ class TraceStore:
                 {
                     "run_id": trace.run_id,
                     "question": trace.question,
+                    "repo": trace.repo,
                     "answer_preview": trace.answer[:_PREVIEW_CHARS],
                     "n_evidence": len(trace.evidence),
                     "n_citations": len(trace.citations),

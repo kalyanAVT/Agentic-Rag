@@ -18,12 +18,17 @@ import logging
 import time
 import uuid
 
+from contextlib import nullcontext
+
 from src.agent import execute_plan_step
 from src.memory.session import SessionMemory
 from src.memory.store import MemoryStore
 from src.memory.writeback import extract_memories
 from src.planner.planner import generate_plan
 from src.synthesis.synthesizer import synthesize
+from src.tools.context import github_context
+from src.tools.github_tools import preflight_repo
+from src.tools.repo import normalize_repo
 from src.tracing.models import MemoryEntry, Trace
 from src.tracing.observability import emit_trace
 from src.tracing.store import TraceStore
@@ -31,7 +36,12 @@ from src.tracing.store import TraceStore
 logger = logging.getLogger(__name__)
 
 
-def run_pipeline(question: str, store: MemoryStore | None = None) -> Trace:
+def run_pipeline(
+    question: str,
+    store: MemoryStore | None = None,
+    repo: str | None = None,
+    token: str | None = None,
+) -> Trace:
     """Execute the full agentic pipeline for a single question.
 
     Phase 4 adds memory: relevant long-term facts are retrieved before planning
@@ -39,7 +49,25 @@ def run_pipeline(question: str, store: MemoryStore | None = None) -> Trace:
     after synthesis (both ends recorded on the trace). Phase 5 persists the
     resulting Trace and ships it to the observability backend, so every run --
     demo or API -- is retrievable afterwards.
+
+    ``repo`` (any GitHub repo, as a URL or "owner/name") scopes the run to live
+    GitHub data for THAT repo, with an optional ``token`` for private repos. With
+    no repo the run stays on the offline seed path. SECURITY: the token is used
+    only to build the GitHub client for this request -- it is never placed on the
+    Trace, on evidence, on tool calls, or in memory.
     """
+    normalized_repo = normalize_repo(repo) if repo else None
+    if normalized_repo:
+        # Fail fast, and with a clear message, if the repo is unreadable -- before
+        # the pipeline spends any LLM calls or tool requests on it.
+        preflight_repo(normalized_repo, token)
+
+    ctx = github_context(normalized_repo, token) if normalized_repo else nullcontext()
+    with ctx:
+        return _execute(question, store, normalized_repo)
+
+
+def _execute(question: str, store: MemoryStore | None, repo: str | None) -> Trace:
     run_id = str(uuid.uuid4())[:8]
     t_start = time.perf_counter_ns()
 
@@ -83,6 +111,7 @@ def run_pipeline(question: str, store: MemoryStore | None = None) -> Trace:
     trace = Trace(
         run_id=run_id,
         question=question,
+        repo=repo,
         memory_used=memory_used,
         plan=plan,
         tool_calls=all_tool_calls,

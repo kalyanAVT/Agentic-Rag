@@ -59,6 +59,18 @@ textarea#question {
 }
 textarea#question:focus { outline: none; border-color: var(--accent); }
 
+/* Repo + optional-token row above the question box (live-GitHub feature). */
+.repo-row { display: flex; gap: .6rem; margin-bottom: .6rem; flex-wrap: wrap; }
+.repo-row input {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: .6rem .75rem; font-size: .9rem; font-family: inherit;
+}
+.repo-row input#repo { flex: 3 1 20rem; min-width: 0; }
+.repo-row input#token { flex: 1 1 12rem; min-width: 0; }
+.repo-row input:focus { outline: none; border-color: var(--accent); }
+.repo-row input::placeholder { color: var(--muted); }
+
 .ask-row { display: flex; align-items: center; gap: .75rem; margin-top: .6rem; flex-wrap: wrap; }
 button#ask-btn {
   background: var(--accent); color: #0b1220; border: 0;

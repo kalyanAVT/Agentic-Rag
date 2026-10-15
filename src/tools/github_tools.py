@@ -17,6 +17,8 @@ import os
 import time
 from typing import Any
 
+from src.tools.context import current_repo, current_token
+from src.tools.repo import RepoAccessError
 from src.tracing.models import EvidenceItem, ToolCall
 
 logger = logging.getLogger(__name__)
@@ -108,14 +110,79 @@ def _mcp_call_sync(tool_name: str, arguments: dict[str, Any]) -> list[dict[str, 
 # PyGithub REST API fallback
 # ===========================================================================
 
+def _redact(text: str, token: str | None) -> str:
+    """Remove a secret token from any text before it can be logged or stored.
+
+    Belt-and-braces: the token should never reach an error string in the first
+    place, but if a library ever echoes it (e.g. in a URL), this keeps it out of
+    ToolCall.result / logs / the persisted Trace.
+    """
+    if token and token in text:
+        return text.replace(token, "***")
+    return text
+
+
 def _get_github_client():
-    """Get an authenticated PyGithub client."""
-    from github import Github, Auth
+    """Get a PyGithub client + repo name for the CURRENT request.
+
+    A per-request repo (set by the pipeline via ``github_context``) always wins
+    and always uses the live REST path; the visitor's token is used when present,
+    otherwise the call is unauthenticated (fine for public repos). With no
+    per-request repo we fall back to the env-configured behavior.
+    """
+    from github import Auth, Github
+
+    repo = current_repo()
+    if repo:
+        token = current_token()
+        if token:
+            return Github(auth=Auth.Token(token)), repo
+        return Github(), repo
+
     config = _get_config()
     token = config["token"]
     if token and token != SENTINEL_TOKEN:
         return Github(auth=Auth.Token(token)), config["repo"]
     return Github(), config["repo"]
+
+
+def preflight_repo(repo: str, token: str | None) -> None:
+    """Verify a repo is readable before running the pipeline against it.
+
+    Turns GitHub's opaque failures into an actionable ``RepoAccessError`` (shown
+    to the user) and never lets the token appear in the message. A private repo
+    with no/invalid token shows up as 404 from GitHub -- we translate that into
+    "not found or needs a token".
+    """
+    from github import Auth, Github, GithubException
+
+    try:
+        gh = Github(auth=Auth.Token(token)) if token else Github()
+    except Exception as exc:  # noqa: BLE001
+        raise RepoAccessError(_redact(f"Could not initialize GitHub client: {exc}", token)) from exc
+
+    try:
+        gh.get_repo(repo)
+    except GithubException as exc:
+        status = getattr(exc, "status", None)
+        if status in (401, 403, 404):
+            raise RepoAccessError(
+                f"Repository '{repo}' was not found, or it is private and the "
+                "token is missing/invalid. Public repos need no token; for private "
+                "repos supply a token with read access."
+            ) from exc
+        raise RepoAccessError(
+            _redact(
+                f"GitHub rejected the request (HTTP {status}): {getattr(exc, 'data', exc)}",
+                token,
+            )
+        ) from exc
+    finally:
+        try:
+            gh.close()
+        except Exception:  # noqa: BLE001
+            pass
+
 
 
 def _rest_search_issues(query: str) -> list[EvidenceItem]:
@@ -352,11 +419,23 @@ def _build_tool_registry() -> dict[str, Any]:
 TOOL_REGISTRY: dict[str, Any] = _build_tool_registry()
 
 
+def _active_registry() -> dict[str, Any]:
+    """The registry to use for the CURRENT request.
+
+    A per-request repo (any public repo, or a private one with a token) always
+    resolves to the live REST tools -- the visitor explicitly asked for a real
+    repo, so mock data would be wrong. Otherwise fall back to the env-built
+    registry (empty offline -> the agent uses mock tools)."""
+    if current_repo():
+        return REST_TOOLS
+    return TOOL_REGISTRY
+
+
 def call_tool(tool_name: str, args: dict[str, Any]) -> tuple[list[EvidenceItem], ToolCall]:
     """
     Call a GitHub tool by name. Same interface as mock_tools.call_tool().
     """
-    func = TOOL_REGISTRY.get(tool_name)
+    func = _active_registry().get(tool_name)
     if func is None:
         return [], ToolCall(
             tool_name=tool_name,

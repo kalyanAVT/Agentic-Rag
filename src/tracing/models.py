@@ -70,6 +70,10 @@ class Trace(BaseModel):
 
     run_id: str
     question: str
+    # Canonical "owner/name" of the GitHub repo this run queried, when the caller
+    # supplied one; None for the offline seed demo. Optional so already-persisted
+    # trace JSON (which lacks the field) still validates.
+    repo: str | None = None
     memory_used: list[MemoryEntry] = Field(default_factory=list)
     plan: list[PlanStep] = Field(default_factory=list)
     tool_calls: list[ToolCall] = Field(default_factory=list)

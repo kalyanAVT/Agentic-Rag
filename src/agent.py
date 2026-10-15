@@ -16,13 +16,16 @@ from typing import Any
 
 from src.llm import get_client, get_model, llm_enabled
 from src.tools import mock_tools, github_tools
+from src.tools.context import current_repo
 from src.tracing.models import EvidenceItem, PlanStep, ToolCall
 
 logger = logging.getLogger(__name__)
 
 
 def _get_active_tools():
-    if github_tools.TOOL_REGISTRY:
+    # A per-request repo means the caller asked for real GitHub data, so the live
+    # tools win even when the env-built registry is empty (offline/no-key case).
+    if current_repo() or github_tools.TOOL_REGISTRY:
         return github_tools.call_tool
     return mock_tools.call_tool
 
