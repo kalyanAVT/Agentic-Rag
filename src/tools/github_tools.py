@@ -384,7 +384,7 @@ def _build_tool_registry() -> dict[str, Any]:
     Returns an empty registry (-> the agent uses mock tools) unless GitHub is
     actually configured with BOTH a real token and a real repo. This prevents
     accidental unauthenticated live calls against a repo you don't control
-    (see CLAUDE.md rule #7).
+    (see CONVENTIONS.md rule #7).
     """
     config = _get_config()
     mode = config["mode"]

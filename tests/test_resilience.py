@@ -3,7 +3,7 @@
 A key that is present but invalid (or any transient API error: rate limit,
 network) must NOT crash a run. Every LLM call site -- planner, agent
 tool-calling, and synthesis -- has to fall back to the deterministic offline
-path so `make demo` always produces a full trace. See CLAUDE.md ground rule 2
+path so `make demo` always produces a full trace. See CONVENTIONS.md ground rule 2
 ("Always keep a working demo path").
 """
 

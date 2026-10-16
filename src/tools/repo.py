@@ -5,7 +5,7 @@ The UI lets a visitor point the agent at ANY GitHub repo -- given as a full URL
 (https://github.com/owner/name) or a bare owner/name slug. normalize_repo()
 turns either into a canonical "owner/name", rejecting anything that is not a
 github.com repo, so the tool layer never builds an API call against a host we
-don't control (mirrors CLAUDE.md rule #7 for the arbitrary-repo case).
+don't control (mirrors CONVENTIONS.md rule #7 for the arbitrary-repo case).
 """
 
 from __future__ import annotations

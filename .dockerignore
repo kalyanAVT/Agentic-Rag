@@ -27,7 +27,6 @@ src/data/*.db
 .pytest_cache/
 tests/
 docs/
-.claude/
 
 # Build artifacts
 dist/

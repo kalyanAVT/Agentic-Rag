@@ -5,7 +5,7 @@ checkpoint. Don't start a phase until the previous one's "Definition of done" is
 met. Update the checkboxes as you go so the current state is clear at a glance.
 
 ## Phase 0 — Scaffolding ✅
-- [x] Repo structure created as in `CLAUDE.md`
+- [x] Repo structure created as in `CONVENTIONS.md`
 - [x] `.env.example` with placeholders for: LLM API key, MCP server config,
       LangSmith/Langfuse key
 - [x] `Makefile` with `setup`, `dev`, `test` targets (can be stubs for now)

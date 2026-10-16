@@ -1,7 +1,7 @@
 # =============================================================================
 # Agentic RAG — Makefile
 # =============================================================================
-# Targets correspond to CLAUDE.md § Commands. Update as the project grows.
+# Targets correspond to CONVENTIONS.md § Commands. Update as the project grows.
 # Cross-platform: selects the venv's Scripts/ (Windows) or bin/ (Linux/macOS).
 # =============================================================================
 
