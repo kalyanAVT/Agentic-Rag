@@ -18,9 +18,10 @@ import logging
 import time
 import uuid
 
-from contextlib import nullcontext
+from contextlib import ExitStack
 
 from src.agent import execute_plan_step
+from src.llm import LLMSettings, llm_context, validate_base_url
 from src.memory.session import SessionMemory
 from src.memory.store import MemoryStore
 from src.memory.writeback import extract_memories
@@ -40,7 +41,8 @@ def run_pipeline(
     question: str,
     store: MemoryStore | None = None,
     repo: str | None = None,
-    token: str | None = None,
+    github_token: str | None = None,
+    llm: LLMSettings | None = None,
 ) -> Trace:
     """Execute the full agentic pipeline for a single question.
 
@@ -51,28 +53,48 @@ def run_pipeline(
     demo or API -- is retrievable afterwards.
 
     ``repo`` (any GitHub repo, as a URL or "owner/name") scopes the run to live
-    GitHub data for THAT repo, with an optional ``token`` for private repos. With
-    no repo the run stays on the offline seed path. SECURITY: the token is used
-    only to build the GitHub client for this request -- it is never placed on the
-    Trace, on evidence, on tool calls, or in memory.
+    GitHub data for THAT repo, with an optional ``github_token`` for private
+    repos. With no repo the run stays on the offline seed path. ``llm`` carries a
+    visitor's own key / base URL / model (bring-your-own-key); None uses the
+    server's config.
+
+    A run against a PRIVATE repo is marked ``private``: it is returned to the
+    caller but never persisted, written to shared memory, or sent to Langfuse.
+
+    SECURITY: the GitHub token and LLM key are used only to build clients for
+    this request -- never placed on the Trace, evidence, tool calls, or memory.
     """
     normalized_repo = normalize_repo(repo) if repo else None
+    if llm is not None and llm.base_url:
+        # The server will send the visitor's key to this URL -- check it first.
+        llm = LLMSettings(
+            api_key=llm.api_key, base_url=validate_base_url(llm.base_url), model=llm.model
+        )
+
+    private = False
     if normalized_repo:
         # Fail fast, and with a clear message, if the repo is unreadable -- before
         # the pipeline spends any LLM calls or tool requests on it.
-        preflight_repo(normalized_repo, token)
+        private = bool(preflight_repo(normalized_repo, github_token))
 
-    ctx = github_context(normalized_repo, token) if normalized_repo else nullcontext()
-    with ctx:
-        return _execute(question, store, normalized_repo)
+    with ExitStack() as stack:
+        if normalized_repo:
+            stack.enter_context(github_context(normalized_repo, github_token))
+        stack.enter_context(llm_context(llm))
+        return _execute(question, store, normalized_repo, private)
 
 
-def _execute(question: str, store: MemoryStore | None, repo: str | None) -> Trace:
+def _execute(
+    question: str, store: MemoryStore | None, repo: str | None, private: bool
+) -> Trace:
     run_id = str(uuid.uuid4())[:8]
     t_start = time.perf_counter_ns()
 
-    # 0. Recall relevant long-term memory (empty if none relevant / no store)
-    memory_used: list[MemoryEntry] = store.retrieve(question) if store else []
+    # 0. Recall relevant long-term memory -- only facts about THIS repo
+    #    ("" = the offline seed demo), so no cross-repo [M#] citations.
+    memory_used: list[MemoryEntry] = (
+        store.retrieve(question, repo=repo or "") if store else []
+    )
 
     # 1. LLM-driven plan (memory-aware)
     t_plan = time.perf_counter_ns()
@@ -98,10 +120,13 @@ def _execute(question: str, store: MemoryStore | None, repo: str | None) -> Trac
     answer, citations = synthesize(question, plan, evidence, memory_used)
     timing["synthesis_ms"] = (time.perf_counter_ns() - t_synth) // 1_000_000
 
-    # 4. Write-back: persist any durable new facts (online only; no-op offline)
+    # 4. Write-back: persist any durable new facts (online only; no-op offline).
+    #    Facts are tagged with their repo. Private runs never write: shared
+    #    memory must not hold a private repo's contents.
     memory_written: list[MemoryEntry] = []
-    if store:
+    if store and not private:
         for entry in extract_memories(question, answer, evidence, run_id):
+            entry = entry.model_copy(update={"repo": repo or ""})
             if store.add(entry):
                 memory_written.append(entry)
 
@@ -112,6 +137,7 @@ def _execute(question: str, store: MemoryStore | None, repo: str | None) -> Trac
         run_id=run_id,
         question=question,
         repo=repo,
+        private=private,
         memory_used=memory_used,
         plan=plan,
         tool_calls=all_tool_calls,
@@ -122,9 +148,11 @@ def _execute(question: str, store: MemoryStore | None, repo: str | None) -> Trac
         timing_ms=timing,
     )
 
-    # 6. Observability side effects -- must never break a run.
-    _persist_trace(trace)
-    emit_trace(trace)  # exception-safe + no-op when Langfuse is not configured
+    # 6. Observability side effects -- must never break a run. Skipped for
+    #    private runs: /runs and Langfuse are shared with other people.
+    if not private:
+        _persist_trace(trace)
+        emit_trace(trace)  # exception-safe + no-op when Langfuse is not configured
 
     return trace
 

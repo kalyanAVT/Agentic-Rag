@@ -143,8 +143,15 @@ def _fallback_synthesis(
     gathered (with citation tags) so `make demo` shows a complete, honest trace
     without an LLM. Set a real LLM API key for a real analytical, cited answer.
     """
+    # With a key set we only get here because the LLM call failed -- say so, so
+    # a visitor with a wrong key / base URL / model can tell what happened.
+    reason = (
+        "the LLM call failed; check the API key, base URL and model in Settings"
+        if llm_enabled()
+        else "no LLM API key set"
+    )
     lines = [
-        "## Answer (fallback - no LLM API key set)\n",
+        f"## Answer (fallback - {reason})\n",
         f"**Question:** {question}\n",
         "**Sub-questions investigated:**\n",
     ]

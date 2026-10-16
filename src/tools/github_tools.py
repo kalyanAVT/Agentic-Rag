@@ -146,8 +146,10 @@ def _get_github_client():
     return Github(), config["repo"]
 
 
-def preflight_repo(repo: str, token: str | None) -> None:
-    """Verify a repo is readable before running the pipeline against it.
+def preflight_repo(repo: str, token: str | None) -> bool:
+    """Verify a repo is readable before running the pipeline against it, and
+    return True if it is PRIVATE (the pipeline then keeps the run out of shared
+    storage).
 
     Turns GitHub's opaque failures into an actionable ``RepoAccessError`` (shown
     to the user) and never lets the token appear in the message. A private repo
@@ -162,7 +164,9 @@ def preflight_repo(repo: str, token: str | None) -> None:
         raise RepoAccessError(_redact(f"Could not initialize GitHub client: {exc}", token)) from exc
 
     try:
-        gh.get_repo(repo)
+        gh_repo = gh.get_repo(repo)
+        # Fail closed: if visibility can't be read, treat the repo as private.
+        return bool(getattr(gh_repo, "private", True))
     except GithubException as exc:
         status = getattr(exc, "status", None)
         if status in (401, 403, 404):

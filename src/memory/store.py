@@ -80,37 +80,55 @@ class MemoryStore:
                 text          TEXT NOT NULL,
                 topic_tags    TEXT NOT NULL DEFAULT '[]',
                 created_at    TEXT NOT NULL,
-                source_run_id TEXT NOT NULL DEFAULT ''
+                source_run_id TEXT NOT NULL DEFAULT '',
+                repo          TEXT NOT NULL DEFAULT ''
             )
             """
         )
+        # Upgrade DBs created before memory was scoped per repo. Existing rows
+        # get repo '' -- they were all written against the offline seed demo.
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(memories)")}
+        if "repo" not in cols:
+            self._conn.execute(
+                "ALTER TABLE memories ADD COLUMN repo TEXT NOT NULL DEFAULT ''"
+            )
         self._conn.commit()
 
     # -- reads --------------------------------------------------------------
 
-    def all(self) -> list[MemoryEntry]:
-        rows = self._conn.execute(
-            "SELECT * FROM memories ORDER BY created_at ASC"
-        ).fetchall()
+    def all(self, repo: str | None = None) -> list[MemoryEntry]:
+        """Every entry, oldest first -- or only those for ``repo`` when given."""
+        if repo is None:
+            rows = self._conn.execute(
+                "SELECT * FROM memories ORDER BY created_at ASC"
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM memories WHERE repo = ? ORDER BY created_at ASC",
+                (repo,),
+            ).fetchall()
         return [self._row_to_entry(r) for r in rows]
 
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
 
-    def retrieve(self, question: str, k: int = DEFAULT_TOP_K) -> list[MemoryEntry]:
+    def retrieve(
+        self, question: str, k: int = DEFAULT_TOP_K, repo: str = ""
+    ) -> list[MemoryEntry]:
         """Return up to k entries most relevant to the question.
 
         Relevance = shared tokens between the question and each entry, with
         topic-tag matches weighted double. Entries with zero overlap are
         excluded -- we feed the planner only what is relevant, not the whole
-        store (see ARCHITECTURE.md section 3, "Retrieval").
+        store (see ARCHITECTURE.md section 3, "Retrieval"). Only facts about the
+        same ``repo`` are considered ("" = the offline seed demo).
         """
         q_tokens = _tokenize(question)
         if not q_tokens:
             return []
 
         scored: list[tuple[int, str, MemoryEntry]] = []
-        for entry in self.all():
+        for entry in self.all(repo):
             text_tokens = _tokenize(entry.text)
             tag_tokens: set[str] = set()
             for tag in entry.topic_tags:
@@ -128,11 +146,12 @@ class MemoryStore:
     def add(self, entry: MemoryEntry) -> bool:
         """Insert an entry unless a near-duplicate already exists.
 
-        Dedup: Jaccard overlap of token sets >= DEDUP_THRESHOLD. Enforces
-        MAX_ENTRIES by evicting the oldest entries. Returns True if inserted.
+        Dedup: Jaccard overlap of token sets >= DEDUP_THRESHOLD, compared only
+        against facts about the same repo. Enforces MAX_ENTRIES by evicting the
+        oldest entries. Returns True if inserted.
         """
         new_tokens = _entry_tokens(entry.text, entry.topic_tags)
-        for existing in self.all():
+        for existing in self.all(entry.repo):
             ex_tokens = _entry_tokens(existing.text, existing.topic_tags)
             if _jaccard(new_tokens, ex_tokens) >= DEDUP_THRESHOLD:
                 return False  # near-duplicate; skip
@@ -141,8 +160,10 @@ class MemoryStore:
         created = entry.created_at or _now_iso()
         cur = self._conn.execute(
             "INSERT OR IGNORE INTO memories "
-            "(id, text, topic_tags, created_at, source_run_id) VALUES (?, ?, ?, ?, ?)",
-            (eid, entry.text, json.dumps(entry.topic_tags), created, entry.source_run_id),
+            "(id, text, topic_tags, created_at, source_run_id, repo) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (eid, entry.text, json.dumps(entry.topic_tags), created,
+             entry.source_run_id, entry.repo),
         )
         self._conn.commit()
         self._enforce_cap()
@@ -179,4 +200,5 @@ class MemoryStore:
             topic_tags=tags,
             created_at=row["created_at"],
             source_run_id=row["source_run_id"],
+            repo=row["repo"],
         )

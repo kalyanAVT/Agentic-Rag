@@ -155,6 +155,23 @@ def test_preflight_ok_for_readable_repo(monkeypatch):
     assert gh.closed is True
 
 
+@pytest.mark.parametrize("visibility, expected", [(False, False), (True, True)])
+def test_preflight_reports_repo_visibility(monkeypatch, visibility, expected):
+    class _Repo:
+        private = visibility
+
+    gh = _FakeGithub(None)
+    gh.get_repo = lambda name: _Repo()
+    monkeypatch.setattr(_pygithub, "Github", lambda *a, **k: gh)
+    assert github_tools.preflight_repo("owner/name", token="ghp_x") is expected
+
+
+def test_preflight_fails_closed_when_visibility_unknown(monkeypatch):
+    # _FakeGithub.get_repo returns a bare object with no `private` attribute.
+    monkeypatch.setattr(_pygithub, "Github", lambda *a, **k: _FakeGithub(None))
+    assert github_tools.preflight_repo("owner/name", token=None) is True
+
+
 # --- pipeline: repo on Trace, token never persisted ------------------------
 
 def test_pipeline_records_repo_and_never_persists_token(monkeypatch, tmp_path):
@@ -163,7 +180,7 @@ def test_pipeline_records_repo_and_never_persists_token(monkeypatch, tmp_path):
     monkeypatch.setenv("TRACE_DIR", str(tmp_path / "traces"))
 
     # No network: skip the real preflight and stub the live tool call.
-    monkeypatch.setattr("src.pipeline.preflight_repo", lambda repo, token: None)
+    monkeypatch.setattr("src.pipeline.preflight_repo", lambda repo, token: False)
 
     def _fake_call_tool(tool_name, args):
         ev = EvidenceItem(
@@ -183,7 +200,7 @@ def test_pipeline_records_repo_and_never_persists_token(monkeypatch, tmp_path):
     try:
         trace = run_pipeline(
             "What issues are open?", store,
-            repo="https://github.com/owner/name", token="ghp_SUPERSECRET",
+            repo="https://github.com/owner/name", github_token="ghp_SUPERSECRET",
         )
     finally:
         store.close()
@@ -224,15 +241,15 @@ def test_ask_malformed_repo_returns_422(client):
 def test_ask_forwards_repo_and_token_but_hides_token(client, monkeypatch):
     seen = {}
 
-    def _fake_run_pipeline(question, store, repo=None, token=None):
-        seen["repo"], seen["token"] = repo, token
+    def _fake_run_pipeline(question, store, repo=None, github_token=None, llm=None):
+        seen["repo"], seen["token"] = repo, github_token
         return Trace(run_id="apitest", question=question, repo="owner/name", answer="ok")
 
     monkeypatch.setattr("src.api.main.run_pipeline", _fake_run_pipeline)
 
     resp = client.post(
         "/ask",
-        json={"question": "q", "repo": "owner/name", "token": "ghp_SUPERSECRET"},
+        json={"question": "q", "repo": "owner/name", "github_token": "ghp_SUPERSECRET"},
     )
     assert resp.status_code == 200
     assert seen["repo"] == "owner/name"          # raw repo forwarded
@@ -242,7 +259,7 @@ def test_ask_forwards_repo_and_token_but_hides_token(client, monkeypatch):
 
 
 def test_ask_unreadable_repo_returns_400(client, monkeypatch):
-    def _boom(question, store, repo=None, token=None):
+    def _boom(question, store, repo=None, github_token=None, llm=None):
         raise RepoAccessError(
             "Repository 'owner/x' was not found, or it is private and the token is missing."
         )

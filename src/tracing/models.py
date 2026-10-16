@@ -50,6 +50,10 @@ class MemoryEntry(BaseModel):
     topic_tags: list[str] = Field(default_factory=list)
     created_at: str = ""
     source_run_id: str = ""
+    # GitHub repo ("owner/name") this fact is about; "" = the offline seed demo.
+    # Recall only returns facts from the same repo, so one repo's facts never
+    # show up as [M#] citations in an answer about another.
+    repo: str = ""
 
 
 class Citation(BaseModel):
@@ -74,6 +78,10 @@ class Trace(BaseModel):
     # supplied one; None for the offline seed demo. Optional so already-persisted
     # trace JSON (which lacks the field) still validates.
     repo: str | None = None
+    # True when the run used the visitor's GitHub token (a private repo): the
+    # Trace is returned to that caller only -- never saved to /runs, never
+    # written to shared memory, never sent to Langfuse.
+    private: bool = False
     memory_used: list[MemoryEntry] = Field(default_factory=list)
     plan: list[PlanStep] = Field(default_factory=list)
     tool_calls: list[ToolCall] = Field(default_factory=list)

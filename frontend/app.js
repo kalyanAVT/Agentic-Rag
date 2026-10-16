@@ -9,6 +9,10 @@
  * It renders a Trace as an Answer (with clickable [E#]/[M#] citations) followed
  * by the reasoning chain — Plan, Tool Calls, Evidence, Memory Used — so a reader
  * can follow how the agent got to its answer without touching the logs.
+ *
+ * Settings (bring-your-own-key): the visitor's LLM key / base URL / model and
+ * GitHub token live in this browser's localStorage and are sent with each
+ * /ask request. The server uses them for that request only and never stores them.
  */
 
 "use strict";
@@ -196,6 +200,8 @@ function renderTrace(trace) {
   $("trace-question").textContent = trace.question || "";
   const meta = [];
   if (trace.run_id) meta.push(`run ${trace.run_id}`);
+  meta.push(trace.repo ? trace.repo : "offline demo");
+  if (trace.private) meta.push("private · not saved");
   meta.push(`${(trace.evidence || []).length} evidence`);
   meta.push(`${(trace.memory_used || []).length} memory`);
   $("trace-meta").textContent = meta.join(" · ");
@@ -214,6 +220,90 @@ function renderTrace(trace) {
   $("trace").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// --- settings (bring-your-own-key) -----------------------------------------
+
+const SETTINGS_KEY = "agentic-rag.settings.v1";
+
+// Picking a provider fills in its endpoint + a model that works there.
+const PROVIDERS = {
+  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/free" },
+  xai: { baseUrl: "https://api.x.ai/v1", model: "grok-2-latest" },
+  custom: null,
+};
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {}; // storage blocked (e.g. some private modes) or corrupt -> defaults
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function fillSettingsForm(s) {
+  $("s-provider").value = s.provider || "openai";
+  $("s-base-url").value = s.llmBaseUrl || "";
+  $("s-model").value = s.llmModel || "";
+  $("s-llm-key").value = s.llmApiKey || "";
+  $("s-github-token").value = s.githubToken || "";
+}
+
+function readSettingsForm() {
+  return {
+    provider: $("s-provider").value,
+    llmBaseUrl: $("s-base-url").value.trim(),
+    llmModel: $("s-model").value.trim(),
+    llmApiKey: $("s-llm-key").value.trim(),
+    githubToken: $("s-github-token").value.trim(),
+  };
+}
+
+function updateLlmStatus() {
+  const s = loadSettings();
+  const el = $("llm-status");
+  if (s.llmApiKey) {
+    el.textContent = `LLM: your key · ${s.llmModel || "default model"}`;
+    el.className = "llm-status llm-own";
+  } else {
+    el.textContent = "LLM: server default";
+    el.className = "llm-status";
+  }
+  if (s.githubToken) el.textContent += " · GitHub token set";
+}
+
+function setSettingsMsg(message, kind = "") {
+  const el = $("settings-msg");
+  el.textContent = message;
+  el.className = "settings-msg" + (kind ? ` status-${kind}` : "");
+}
+
+function openSettings() {
+  fillSettingsForm(loadSettings());
+  setSettingsMsg("");
+  $("settings").hidden = false;
+  $("settings-backdrop").hidden = false;
+  $("settings-open").setAttribute("aria-expanded", "true");
+  $("s-provider").focus();
+}
+
+function closeSettings() {
+  $("settings").hidden = true;
+  $("settings-backdrop").hidden = true;
+  $("settings-open").setAttribute("aria-expanded", "false");
+  $("settings-open").focus();
+}
+
 // --- data calls ------------------------------------------------------------
 
 // FastAPI returns errors as {"detail": "..."} (e.g. a bad repo URL -> 422, an
@@ -223,20 +313,27 @@ async function errorDetail(resp) {
   try {
     const j = JSON.parse(raw);
     if (j && typeof j.detail === "string") return j.detail;
+    if (j && Array.isArray(j.detail)) return j.detail.map((e) => e.msg).join("; ");
   } catch (_) {}
   return raw.slice(0, 300);
 }
 
-async function ask(question, repo, token) {
+async function ask(question, repo) {
   setStatus("Thinking — planning, calling tools, synthesizing…", "busy");
   $("ask-btn").disabled = true;
   try {
-    // repo/token are optional: omit them so the server takes the offline
-    // seed-demo path when no repo is given. The token authenticates only this
-    // one request and is never echoed back in the Trace.
+    // Everything but the question is optional: no repo -> the offline seed
+    // demo; no LLM key -> the server's default LLM config. Secrets from
+    // Settings authenticate only this request and are never echoed back.
+    const s = loadSettings();
     const payload = { question };
     if (repo) payload.repo = repo;
-    if (token) payload.token = token;
+    if (s.githubToken) payload.github_token = s.githubToken;
+    if (s.llmApiKey) {
+      payload.llm_api_key = s.llmApiKey;
+      if (s.llmBaseUrl) payload.llm_base_url = s.llmBaseUrl;
+      if (s.llmModel) payload.llm_model = s.llmModel;
+    }
     const resp = await fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -300,15 +397,56 @@ async function loadRun(runId) {
 $("ask-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const q = $("question").value.trim();
-  if (q) ask(q, $("repo").value.trim(), $("token").value.trim());
+  if (q) ask(q, $("repo").value.trim());
 });
 
 document.querySelectorAll(".example").forEach((btn) =>
   btn.addEventListener("click", () => {
     $("question").value = btn.dataset.q;
-    ask(btn.dataset.q, $("repo").value.trim(), $("token").value.trim());
+    ask(btn.dataset.q, $("repo").value.trim());
   })
 );
 
-// Prime the recent-runs list on load.
+$("settings-open").addEventListener("click", openSettings);
+$("settings-close").addEventListener("click", closeSettings);
+$("settings-backdrop").addEventListener("click", closeSettings);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("settings").hidden) closeSettings();
+});
+
+$("s-provider").addEventListener("change", (e) => {
+  const preset = PROVIDERS[e.target.value];
+  if (preset) {
+    $("s-base-url").value = preset.baseUrl;
+    $("s-model").value = preset.model;
+  }
+});
+
+$("s-show").addEventListener("change", (e) => {
+  const type = e.target.checked ? "text" : "password";
+  $("s-llm-key").type = type;
+  $("s-github-token").type = type;
+});
+
+$("settings-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (saveSettings(readSettingsForm())) {
+    setSettingsMsg("Saved in this browser.", "ok");
+  } else {
+    setSettingsMsg("Couldn't save — this browser is blocking local storage.", "error");
+  }
+  updateLlmStatus();
+});
+
+$("settings-clear").addEventListener("click", () => {
+  try {
+    localStorage.removeItem(SETTINGS_KEY);
+  } catch (_) {}
+  fillSettingsForm({});
+  setSettingsMsg("Cleared. Questions now use the server's defaults.", "ok");
+  updateLlmStatus();
+});
+
+// Prime the LLM label and the recent-runs list on load.
+updateLlmStatus();
 loadRuns();

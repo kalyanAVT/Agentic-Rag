@@ -8,7 +8,11 @@
 </head>
 <body>
   <header class="site-header">
-    <h1>Agentic RAG</h1>
+    <div class="header-top">
+      <h1>Agentic RAG</h1>
+      <button id="settings-open" class="settings-btn" type="button"
+              aria-controls="settings" aria-expanded="false">⚙ Settings</button>
+    </div>
     <p class="tagline">
       Ask a multi-hop question about <strong>any GitHub repo</strong> (or the built-in
       offline demo). Watch the agent
@@ -28,15 +32,7 @@
           type="text"
           autocomplete="off"
           spellcheck="false"
-          placeholder="GitHub repo — e.g. fastapi/fastapi or https://github.com/psf/requests"
-        />
-        <label for="token" class="sr-only">GitHub token (optional, for private repos)</label>
-        <input
-          id="token"
-          name="token"
-          type="password"
-          autocomplete="off"
-          placeholder="Token (only for private repos)"
+          placeholder="GitHub repo — e.g. fastapi/fastapi or https://github.com/psf/requests (empty = offline demo)"
         />
       </div>
       <label for="question" class="sr-only">Your question</label>
@@ -49,6 +45,7 @@
       ></textarea>
       <div class="ask-row">
         <button id="ask-btn" type="submit">Ask</button>
+        <span id="llm-status" class="llm-status"></span>
         <div class="examples" aria-label="Example questions">
           <button type="button" class="example" data-q="What did we decide about the dashboard pagination fix, and is it still on track?">pagination fix</button>
           <button type="button" class="example" data-q="What are the most recent merged pull requests, and what did they change?">recent PRs</button>
@@ -80,10 +77,61 @@
   </main>
 
   <footer class="site-footer">
-    <span>Offline-capable demo — runs with mock data and a deterministic
-    fallback when no LLM key is set.</span>
+    <span>No key? It still runs — on the offline demo data with a deterministic
+    fallback. Add your own keys in ⚙ Settings to use a real LLM and private repos.</span>
     <a href="/docs" target="_blank" rel="noopener">API docs</a>
   </footer>
+
+  <!-- Settings drawer: the visitor's own keys, kept only in this browser ------ -->
+  <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+  <aside id="settings" class="settings-panel" role="dialog" aria-modal="true"
+         aria-labelledby="settings-title" hidden>
+    <div class="settings-head">
+      <h2 id="settings-title">Settings</h2>
+      <button type="button" id="settings-close" class="icon-btn" aria-label="Close settings">✕</button>
+    </div>
+    <p class="settings-note">
+      Saved <strong>only in this browser</strong> and sent with each question.
+      The server uses them for that one request and never stores them.
+    </p>
+    <form id="settings-form" autocomplete="off">
+      <fieldset>
+        <legend>LLM</legend>
+        <label for="s-provider">Provider</label>
+        <select id="s-provider">
+          <option value="openai">OpenAI</option>
+          <option value="openrouter">OpenRouter (has a free tier)</option>
+          <option value="xai">xAI Grok</option>
+          <option value="custom">Custom (OpenAI-compatible)</option>
+        </select>
+        <label for="s-base-url">Base URL</label>
+        <input id="s-base-url" type="url" spellcheck="false" autocomplete="off"
+               placeholder="https://api.openai.com/v1" />
+        <label for="s-model">Model</label>
+        <input id="s-model" type="text" spellcheck="false" autocomplete="off"
+               placeholder="gpt-4o-mini" />
+        <label for="s-llm-key">API key</label>
+        <input id="s-llm-key" type="password" autocomplete="off" spellcheck="false"
+               placeholder="sk-…" />
+        <p class="hint">Leave the key empty to use the server's default (the offline
+        demo on the public site).</p>
+      </fieldset>
+      <fieldset>
+        <legend>GitHub</legend>
+        <label for="s-github-token">Token</label>
+        <input id="s-github-token" type="password" autocomplete="off" spellcheck="false"
+               placeholder="github_pat_… or ghp_…" />
+        <p class="hint">Needed for private repos, and raises GitHub's rate limit for
+        public ones. Read-only access is enough.</p>
+      </fieldset>
+      <label class="check"><input id="s-show" type="checkbox" /> Show keys</label>
+      <div class="settings-actions">
+        <button type="submit" class="primary">Save</button>
+        <button type="button" id="settings-clear" class="danger">Clear all</button>
+      </div>
+      <p id="settings-msg" class="settings-msg" role="status" aria-live="polite"></p>
+    </form>
+  </aside>
 
   <script src="app.js"></script>
 </body>

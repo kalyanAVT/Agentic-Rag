@@ -156,7 +156,8 @@ make test
 ```
 
 > On Windows without `make`, call the venv Python directly, e.g.
-> `.venv/Scripts/python.exe -m src.demo` and `.venv/Scripts/python.exe -m pytest tests/ -q`.
+> `.venv/Scripts/python.exe -m src.demo`, `.venv/Scripts/python.exe -m pytest tests/ -q`,
+> and for the web app `.venv/Scripts/python.exe -m uvicorn src.api.main:app --reload --port 8000`.
 
 `make demo` works **with no API key** — it runs the deterministic offline path and
 still prints a complete plan → evidence → cited answer → trace for all three
@@ -167,7 +168,9 @@ questions, including a cross-session memory-recall scenario. Set a real LLM key
 
 The pipeline talks to its LLM through the OpenAI SDK, which speaks to **any
 OpenAI-compatible provider** — so switching providers is pure `.env` config, no
-code change. Configure it in `.env` (see [`.env.example`](.env.example)):
+code change. Configure the **server's default** in `.env` (see
+[`.env.example`](.env.example)) — or let each visitor bring their own key from the
+web UI's **⚙ Settings** panel (see [Bring your own keys](#bring-your-own-keys)):
 
 | Variable | Purpose |
 |---|---|
@@ -212,11 +215,18 @@ LLM_MODEL=grok-2-latest
 
 ## Data source
 
-The data source is **GitHub** (issues, PRs, comments, commits on a repo you own),
-accessed via a repo-scoped fine-grained PAT. `GITHUB_MCP_MODE` in `.env` selects
-the access mode; with the sentinel values it runs entirely on **mock seed data**,
-so the demo is fully self-contained offline. Point `GITHUB_REPO` only at a repo
-you control. See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for the rationale.
+The data source is **GitHub** (issues, PRs, comments, commits). Two ways in:
+
+- **Per question, any repo** — type a public repo (`owner/name` or a
+  `https://github.com/...` URL) into the web UI, or pass `repo` to `POST /ask`.
+  The run reads that repo live over the GitHub REST API (read-only; only
+  `github.com` hosts are accepted). Private repos work with a GitHub token from
+  ⚙ Settings. Leave the repo empty for the offline seed demo.
+- **Server default** — `GITHUB_MCP_MODE` / `GITHUB_REPO` / `GITHUB_TOKEN` in
+  `.env`; with the sentinel values it runs entirely on **mock seed data**, so the
+  demo is fully self-contained offline.
+
+See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for the rationale.
 
 ## HTTP API
 
@@ -224,7 +234,7 @@ you control. See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for the ration
 
 | Method & path | Purpose |
 |---|---|
-| `POST /ask` | Run the full pipeline for `{"question": "..."}` and return the complete `Trace` (plan, tool calls, evidence, memory, cited answer, timings). The run is also persisted and emitted to observability. |
+| `POST /ask` | Run the full pipeline for `{"question": "..."}` and return the complete `Trace` (plan, tool calls, evidence, memory, cited answer, timings). Optional: `repo`, `github_token`, `llm_api_key`, `llm_base_url`, `llm_model` (see [Bring your own keys](#bring-your-own-keys)). Public runs are persisted and emitted to observability. |
 | `GET /runs` | List summaries of every persisted run, newest first. |
 | `GET /runs/{run_id}` | Fetch one run's full `Trace` JSON (`404` if unknown). |
 | `GET /health` | Liveness + current build phase. |
@@ -247,6 +257,28 @@ section, scrolls to and flashes the matching evidence or memory card, and an
 evidence card with a source URL links out to the GitHub issue / PR / commit. A
 **Recent runs** strip lists past runs (`GET /runs`) and loads any of them in full
 (`GET /runs/{run_id}`).
+
+### Bring your own keys
+
+Click **⚙ Settings** to enter your own **LLM API key**, **provider / base URL**,
+**model**, and **GitHub token**. They're saved **only in your browser**
+(`localStorage`), so they persist across sessions, and are sent with each
+question. The server uses them for that one request and never stores them: they
+never appear in the Trace, logs, memory, or any response (a rejected request's
+422 doesn't echo them either). A label next to **Ask** shows which LLM will
+answer, and **Clear all** wipes them. With no key, questions use the server's
+default config — the offline demo on the public site.
+
+Because many visitors share one server:
+
+- **Private repos stay private.** A run against a private repo is returned only
+  to you — never saved to `/runs`, written to shared memory, or sent to Langfuse.
+- **Memory is per repo.** Facts learned about one repo are only recalled for
+  questions about the same repo.
+- **Base URLs are checked.** A base URL entered in Settings must be `https` and
+  point to a public address, so the hosted server can't be aimed at internal
+  addresses. The server's own `LLM_BASE_URL` in `.env` isn't restricted (a local
+  Ollama URL still works).
 
 It's a single no-build static page (`frontend/index.html` + `app.js` +
 `styles.css`) that the FastAPI app serves itself, so the whole thing ships as one
