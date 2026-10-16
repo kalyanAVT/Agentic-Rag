@@ -64,6 +64,18 @@ def test_static_mount_does_not_shadow_json_api(client):
     assert isinstance(runs.json(), list)
 
 
+def test_settings_panel_and_provider_presets_are_served(client):
+    body = client.get("/").text
+    assert 'id="settings"' in body            # the settings drawer
+    assert 'id="s-llm-key"' in body           # LLM key field
+    assert 'id="s-github-token"' in body      # GitHub token field
+    assert '<option value="groq">' in body    # provider preset present
+
+    js = client.get("/app.js").text
+    assert "api.groq.com/openai/v1" in js     # preset fills the real endpoint
+    assert "openai/gpt-oss-20b" in js
+
+
 def test_openapi_docs_still_served(client):
     # FastAPI's docs routes are registered before the mount, so they survive.
     assert client.get("/openapi.json").status_code == 200

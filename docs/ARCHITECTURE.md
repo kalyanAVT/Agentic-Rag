@@ -95,8 +95,7 @@
 
 ## 3. Memory design — the part to get right
 
-This is the section most likely to be probed in an interview, so be precise
-about the split:
+This split is the part worth getting right, so be precise about it:
 
 ### Short-term (session) memory
 - Scope: a single conversation/run.

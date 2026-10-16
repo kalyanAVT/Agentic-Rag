@@ -204,6 +204,14 @@ LLM_BASE_URL=https://api.x.ai/v1
 LLM_MODEL=grok-2-latest
 ```
 
+**Groq** (fast, OpenAI-compatible, generous free tier):
+
+```dotenv
+LLM_API_KEY=gsk_your-key
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=openai/gpt-oss-20b
+```
+
 > The planner (structured output) and agent (tool-calling) need a model that
 > supports those features — the Grok models and the capable free models the
 > router selects do. If a chosen model lacks them, returns empty content, or is
@@ -261,7 +269,9 @@ evidence card with a source URL links out to the GitHub issue / PR / commit. A
 ### Bring your own keys
 
 Click **⚙ Settings** to enter your own **LLM API key**, **provider / base URL**,
-**model**, and **GitHub token**. They're saved **only in your browser**
+**model**, and **GitHub token**. The provider menu has presets for OpenAI,
+OpenRouter, xAI Grok, and Groq (it fills in the endpoint and a default model),
+plus **Custom** for any other OpenAI-compatible API. They're saved **only in your browser**
 (`localStorage`), so they persist across sessions, and are sent with each
 question. The server uses them for that one request and never stores them: they
 never appear in the Trace, logs, memory, or any response (a rejected request's
@@ -380,12 +390,12 @@ Full detail (with "definition of done" per phase) in [`docs/ROADMAP.md`](docs/RO
 | 0 | Scaffolding, FastAPI `/health`, Makefile | ✅ Done |
 | 1 | Hardcoded pipeline over seed data + synthesis + trace | ✅ Done |
 | 2 | LLM-driven planner + real tool-calling | ✅ Done |
-| 3 | Live GitHub data source | 🟡 REST tool layer built; live verification deferred (mock fallback works) |
+| 3 | Live GitHub data source | ✅ Live over the GitHub REST API — ask about any public repo (private with a token); offline seed demo when no repo is given |
 | 4 | Long-term + session memory, selective write-back, cross-session recall | ✅ Done |
 | 5 | Observability — persisted Trace JSON + HTTP API to retrieve runs; optional Langfuse hook | ✅ Done (JSON + API verified; Langfuse hook wired, add a key to light it) |
 | 6 | Minimal web UI (question → expandable trace) | ✅ Done |
-| 7 | Dockerize + deploy to DigitalOcean | 🟡 Containerized; one-command DO deploy (`make deploy`). Public URL achieved on a free Render tier — see [Live demo](#live-demo) |
-| 8 | Polish — architecture diagram, design-decisions writeup, demo-data cleanup | 🟡 Diagram + writeup + clean demo data + **live URL** done; demo GIF is the last hand-off |
+| 7 | Containerize + deploy | ✅ One container (API + UI), live at [agentic-rag-2dk7.onrender.com](https://agentic-rag-2dk7.onrender.com); one-command DigitalOcean deploy (`make deploy`) |
+| 8 | Polish — architecture diagram, design-decisions writeup, demo-data cleanup | 🟡 Diagram, writeup, clean demo data and live URL done; the demo GIF is the last item |
 
 ## Design decisions
 
@@ -454,3 +464,4 @@ broken state.
 ## License
 
 MIT
+Feel free to use it, and please suggest any improvements if needed.

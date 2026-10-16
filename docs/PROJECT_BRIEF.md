@@ -7,11 +7,10 @@ changing workspace (GitHub — issues, PRs, commits), using query decomposition,
 MCP, short- and long-term memory, and a fully traced plan → evidence → answer
 pipeline — deployed as a live demo on DigitalOcean.
 
-## Why this project (for shortlisting / resume)
+## Why this project
 
-This is a deliberately chosen project because it touches nearly every skill that
-shows up in "agentic AI engineer" and "applied AI" job descriptions in one coherent
-system, not five disconnected toy scripts:
+This scope was chosen deliberately: it exercises many parts of an applied-AI system
+in one coherent build, rather than a set of disconnected demo scripts:
 
 | Skill area | Where it shows up here |
 |---|---|
@@ -24,21 +23,20 @@ system, not five disconnected toy scripts:
 | Systems / deployment | Containerized, deployed to a cloud VM, has a real public URL |
 | Product sense | A defensible, narrow scope with a clear demo script, not scope creep |
 
-The goal is a system you can **demo live in an interview in under 2 minutes**:
-type a multi-hop question, watch the trace unfold (plan, tool calls, evidence,
-memory used), and get a cited answer.
+The goal is a system you can **walk through end to end in under 2 minutes**: type a
+multi-hop question, watch the trace unfold (plan, tool calls, evidence, memory
+used), and get a cited answer.
 
 ## Scope decisions (lock these in before coding)
 
-Fill these in and keep this file updated — Claude Code should treat this section
-as the source of truth for scope, and check it at the start of any session.
+Keep this section updated — it is the source of truth for scope.
 
 - **Chosen data source: GitHub** (issues, pull requests, comments, commits on
   one repo you own). Rationale:
   - You almost certainly already have a GitHub account — no new signup, and
-    it's genuinely *live* data if you (or, ideally, an ongoing seed script)
-    keep opening issues/PRs/comments over the run-up to the demo, rather than
-    a one-time fake dataset that goes stale.
+    it's genuinely *live* data if a seed script (or ongoing activity) keeps
+    opening issues/PRs/comments, rather than a one-time fake dataset that goes
+    stale.
   - An official GitHub MCP server exists, so the MCP-connector plumbing is
     mostly "wire it up," and your build time goes into the planner/memory/
     tracing logic instead of writing a REST wrapper from scratch.
@@ -50,7 +48,7 @@ as the source of truth for scope, and check it at the start of any session.
     else's repo you don't control — you need to be able to shape what
     "changed this quarter" looks like for the demo to land reliably.
 - **Seeding the demo repo:** create a repo (e.g. `demo-project-x`) and, over
-  the days/weeks before the interview, script or manually create:
+  time, script or manually create:
   - a handful of issues with labels (`bug`, `blocker`, `feature`) and a
     milestone with a due date
   - a couple of due-date changes on the milestone (this is your "deadlines

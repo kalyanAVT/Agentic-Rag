@@ -229,6 +229,7 @@ const PROVIDERS = {
   openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/free" },
   xai: { baseUrl: "https://api.x.ai/v1", model: "grok-2-latest" },
+  groq: { baseUrl: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-20b" },
   custom: null,
 };
 

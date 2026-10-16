@@ -2,7 +2,7 @@
 
 Work through these phases **in order**. Each phase ends with a working, demoable
 checkpoint. Don't start a phase until the previous one's "Definition of done" is
-met. Update the checkboxes as you go so future sessions know where things stand.
+met. Update the checkboxes as you go so the current state is clear at a glance.
 
 ## Phase 0 — Scaffolding ✅
 - [x] Repo structure created as in `CLAUDE.md`
@@ -98,34 +98,33 @@ met. Update the checkboxes as you go so future sessions know where things stand.
     all serve, the JSON API is not shadowed, and stored traces render with
     working citations (see `tests/test_frontend.py`).
 
-## Phase 7 — Deployment 🟡
+## Phase 7 — Deployment ✅
 - [x] Dockerize API + frontend (see `docs/DEPLOYMENT.md`) — one multi-stage,
       non-root image (`infra/Dockerfile`) serving the API + static UI as a single
       Uvicorn process; `infra/docker-compose.yml` for local prod-parity with a
       named volume. `make docker-build` / `docker-run` / `compose-up`.
-- [x] Deploy to DigitalOcean (App Platform or a droplet — see DEPLOYMENT.md
+- [x] Deploy to a public host (App Platform, or a droplet — see DEPLOYMENT.md
       for the trade-off) — App Platform spec written (`infra/do-app.yaml`),
-      one-command `make deploy` (`doctl apps create --spec … --upsert`).
-      **Live deploy handed off — needs the user's DO account** (`doctl auth init`
-      + GitHub repo connected). No Docker daemon / `doctl` on this machine.
+      one-command `make deploy` (`doctl apps create --spec … --upsert`), plus a
+      `render.yaml` Blueprint for a free-tier deploy from the Render dashboard.
+      **Live at
+      [agentic-rag-2dk7.onrender.com](https://agentic-rag-2dk7.onrender.com)**.
 - [x] Secrets configured via DO's environment/secrets management, not baked
       into the image — the committed spec carries only offline-safe sentinels
       (`sk-change-me`, …); `.dockerignore` keeps `.env` out of the build context;
       real keys get added Encrypted in the DO dashboard.
-- [ ] Confirm the 2–3 canned demo questions work against the deployed instance
-      — pending the live deploy above (user-owned hand-off).
+- [x] Confirm the canned questions work against the deployed instance — verified
+      against the live URL above.
 - **Definition of done:** a public URL exists, and the full demo works on it,
-  not just locally. — *Containerization + deploy config are complete and verified
-  statically (`tests/test_deploy_config.py`); the public-URL step is the
-  user-owned hand-off (DO account required).*
+  not just locally. ✅ Containerization + deploy config are verified statically
+  (`tests/test_deploy_config.py`) and the app runs live on the public URL.
 
-## Phase 8 — Polish for shortlisting 🟡
+## Phase 8 — Polish 🟡
 - [x] README with architecture diagram — a **Mermaid** flowchart (renders natively
       on GitHub) of the recall → plan → act → synthesize → write-back pipeline, with
       the live/offline tool split and trace fan-out; a plain-text ASCII version is
-      kept collapsed as a fallback. *Live demo link + short GIF are hand-offs* (a
-      ready-to-paste `## Live demo` block + `docs/assets/README.md` capture checklist
-      are in place; both need the public deploy, which is the Phase 7 hand-off).
+      kept collapsed as a fallback. The `## Live demo` section links the live URL,
+      and `docs/assets/README.md` has the capture checklist for a short demo GIF.
 - [x] A written "design decisions" section addressing: why this memory
       design, why this planner is linear (not a DAG), what you'd change to
       scale this to production — expanded into four subsections in the README.
@@ -136,9 +135,8 @@ met. Update the checkboxes as you go so future sessions know where things stand.
       release, and are there any PRs addressing them?"), verified end-to-end; and
       reset the local long-term-memory DB so no stale write-back fossils linger
       (it's gitignored and re-seeds from `src/memory/seed.py`).
-- **Definition of done:** you could hand the README + live link to a recruiter
-  with zero further explanation needed. — *Diagram, design-decisions writeup, and
-  demo-data cleanup are complete. The only outstanding items are the live public
-  URL and a screen-capture GIF, both of which depend on the Phase 7 deploy
-  hand-off (user's DO account); the README has ready-to-fill placeholders for both.*
+- [ ] Record a short screen capture of the web UI for the README (`docs/assets/README.md`).
+- **Definition of done:** the README + live link explain the whole system on their
+  own. Diagram, design-decisions writeup, demo-data cleanup, and the live URL are
+  done; the demo GIF is the last item.
 
